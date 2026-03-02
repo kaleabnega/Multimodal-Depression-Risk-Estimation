@@ -33,9 +33,42 @@ PYTHONPATH=src python scripts/run_demo.py \
   --frames /absolute/path/to/frame1.jpg /absolute/path/to/frame2.jpg
 ```
 
+Audio transcription into text branch (ASR):
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --asr-from-audio \
+  --audio-wav /absolute/path/to/audio_16khz.wav
+```
+
+Combine typed text + spoken transcript:
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --text "I want to add context" \
+  --asr-from-audio \
+  --audio-wav /absolute/path/to/audio_16khz.wav
+```
+
+Video-based visual inference with face preprocessing:
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --text "I feel okay today" \
+  --video /absolute/path/to/clip.mp4 \
+  --video-fps 1.0 \
+  --max-frames 8
+```
+
 Notes:
 - `--audio-wav` must be a 16kHz WAV file.
+- `--asr-from-audio` uses HF ASR API and injects transcript into the text branch.
 - `--frames` should be image file paths.
+- `--video` extracts frames and runs a local face pipeline (detect/crop/filter) before visual inference.
+- Install optional vision dependencies for video/face pipeline: `pip install -e .[vision]`.
 - Default backend is `hf_api`. Use `--backend local` for local `transformers` inference.
 - Default response backend is `guarded_llm`. Use `--response-backend template` for deterministic templates only.
 - Override responder LLM with `--response-model <model_id>` if your provider does not support the default.

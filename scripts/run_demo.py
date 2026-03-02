@@ -9,6 +9,7 @@ from mde.core.types import UserInput
 from mde.models.audio_encoder import AudioEncoder
 from mde.models.fusion import MaskedFusionMLP
 from mde.models.hf_api_audio_encoder import HFAPIAudioEncoder
+from mde.models.hf_api_asr import HFAPIAudioTranscriber
 from mde.models.hf_api_text_encoder import HFAPITextEncoder
 from mde.models.hf_api_visual_encoder import HFAPIVisualEncoder
 from mde.models.multimodal_encoder import MultimodalEncoder
@@ -17,6 +18,7 @@ from mde.models.visual_encoder import VisualEncoder
 from mde.services.pipeline import DepressionRiskPipeline
 from mde.services.policy import SafetyPolicyEngine
 from mde.services.response import GuardedLLMResponseGenerator, TemplateResponseGenerator
+from mde.utils.vision_pipeline import FacePipeline
 
 
 def _load_dotenv(dotenv_path: str = ".env") -> None:
@@ -148,7 +150,7 @@ def build_pipeline(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run multimodal depression risk inference")
-    parser.add_argument("--text", required=True, help="User text input")
+    parser.add_argument("--text", default="", help="User text input")
     parser.add_argument(
         "--backend",
         default="hf_api",
@@ -167,6 +169,34 @@ def _parse_args() -> argparse.Namespace:
         help="LLM model id for guarded_llm response backend",
     )
     parser.add_argument("--audio-wav", help="Path to 16kHz WAV audio file")
+    parser.add_argument(
+        "--asr-from-audio",
+        action="store_true",
+        help="Transcribe --audio-wav with HF ASR and inject transcript into text branch",
+    )
+    parser.add_argument(
+        "--asr-model",
+        default="openai/whisper-large-v3",
+        help="ASR model id used when --asr-from-audio is set",
+    )
+    parser.add_argument("--video", help="Path to video file for visual cue extraction")
+    parser.add_argument(
+        "--video-fps",
+        type=float,
+        default=1.0,
+        help="Frame extraction rate from video input",
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=10,
+        help="Maximum number of frames used for visual inference",
+    )
+    parser.add_argument(
+        "--skip-face-pipeline",
+        action="store_true",
+        help="Skip local face detection/cropping and use raw frames",
+    )
     parser.add_argument("--frames", nargs="*", default=None, help="Frame image file paths")
     parser.add_argument(
         "--hf-api-token",
@@ -202,7 +232,32 @@ def main() -> None:
     )
 
     audio = _read_wav_16khz_mono(args.audio_wav) if args.audio_wav else None
+    final_text = args.text.strip()
+    if args.asr_from_audio:
+        if not args.audio_wav:
+            raise ValueError("--asr-from-audio requires --audio-wav")
+        transcriber = HFAPIAudioTranscriber(
+            model_name=args.asr_model,
+            api_token=api_token,
+            allow_fallback=args.allow_fallback,
+        )
+        transcript = transcriber.transcribe(args.audio_wav).strip()
+        if transcript:
+            final_text = f"{final_text}\n{transcript}".strip() if final_text else transcript
+
+    if not final_text:
+        raise ValueError("Text input is required. Provide --text, or use --asr-from-audio with valid speech.")
+
     frames: list[str] | None = None
+    face_pipeline = FacePipeline(fps=args.video_fps, max_frames=args.max_frames)
+
+    video_frames: list[str] = []
+    if args.video:
+        video_frames = face_pipeline.extract_frames_from_video(args.video)
+
+    if video_frames:
+        frames = video_frames
+
     if args.frames:
         validated: list[str] = []
         for frame in args.frames:
@@ -210,10 +265,15 @@ def main() -> None:
             if not frame_path.exists() or not frame_path.is_file():
                 raise FileNotFoundError(f"Frame file not found: {frame_path}")
             validated.append(str(frame_path))
-        frames = validated
+        frames = (frames or []) + validated
+
+    if frames and not args.skip_face_pipeline:
+        frames = face_pipeline.process_frames(frames)
+    elif frames:
+        frames = frames[: args.max_frames]
 
     user_input = UserInput(
-        text=args.text,
+        text=final_text,
         audio=audio,
         frames=frames,
     )
