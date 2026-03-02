@@ -15,11 +15,33 @@ This repository contains a class-based implementation for a multimodal depressio
 ## Run Demo
 
 ```bash
-PYTHONPATH=src python scripts/run_demo.py
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --response-backend guarded_llm \
+  --text "I have felt very low this week"
 ```
 
-The demo currently runs with `load_pretrained=False` for deterministic offline execution.
-Set `load_pretrained=True` in `scripts/run_demo.py` to use real Hugging Face models.
+For full multimodal pretrained inference:
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --response-backend guarded_llm \
+  --text "I feel empty and tired lately" \
+  --audio-wav /absolute/path/to/audio_16khz.wav \
+  --frames /absolute/path/to/frame1.jpg /absolute/path/to/frame2.jpg
+```
+
+Notes:
+- `--audio-wav` must be a 16kHz WAV file.
+- `--frames` should be image file paths.
+- Default backend is `hf_api`. Use `--backend local` for local `transformers` inference.
+- Default response backend is `guarded_llm`. Use `--response-backend template` for deterministic templates only.
+- Set token with `--hf-api-token` or environment variable `HF_API_TOKEN` (or `HUGGINGFACE_HUB_TOKEN`).
+- `scripts/run_demo.py` auto-loads `.env` from project root, so `HF_API_TOKEN=...` in `.env` works directly.
+- Local backend uses `load_pretrained=True` and `allow_fallback=False` by default.
+- Add `--allow-fallback` if you want to proceed when model loading fails.
+- Add `--local-files-only` to force model loading from local Hugging Face cache only.
 
 ## Notes
 
