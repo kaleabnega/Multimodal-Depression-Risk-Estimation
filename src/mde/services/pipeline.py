@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from mde.core.types import AgentInput, PipelineOutput, TurnInput
+from mde.models.multimodal_encoder import MultimodalEncoder
+from mde.models.fusion import MaskedFusionMLP
+from mde.services.policy import SafetyPolicyEngine
+from mde.services.response import TemplateResponseGenerator
+
+
+class DepressionRiskPipeline:
+    """End-to-end pipeline: encode -> fuse -> policy -> response."""
+
+    def __init__(
+        self,
+        encoder: MultimodalEncoder,
+        fusion: MaskedFusionMLP,
+        policy: SafetyPolicyEngine,
+        responder: TemplateResponseGenerator,
+    ) -> None:
+        self.encoder = encoder
+        self.fusion = fusion
+        self.policy = policy
+        self.responder = responder
+
+    def run_turn(self, turn: TurnInput) -> PipelineOutput:
+        features, audio_summary, visual_summary = self.encoder.encode(turn)
+        fusion_out = self.fusion.predict(features)
+        policy_out = self.policy.decide(text=turn.text, risk_score=fusion_out.risk_score)
+
+        response = self.responder.generate(
+            AgentInput(
+                user_text=turn.text,
+                risk_score=fusion_out.risk_score,
+                policy_state=policy_out.state,
+                audio_summary=audio_summary,
+                visual_summary=visual_summary,
+            )
+        )
+
+        return PipelineOutput(
+            features=features,
+            fusion=fusion_out,
+            policy=policy_out,
+            response=response,
+        )
