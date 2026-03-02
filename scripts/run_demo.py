@@ -213,6 +213,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow deterministic fallback encoders if pretrained loading fails",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print intermediate multimodal features for troubleshooting",
+    )
     return parser.parse_args()
 
 
@@ -285,6 +290,15 @@ def main() -> None:
     print(f"reasons={output.policy.reasons}")
     print(f"modality_mask={output.fusion.modality_mask}")
     print(f"response={output.response}")
+    if args.debug:
+        print("--- debug ---")
+        print(f"text_len={len(final_text)}")
+        print(f"audio_samples={len(audio) if audio is not None else 0}")
+        print(f"num_frames_inferred={len(frames) if frames is not None else 0}")
+        print(f"text_risk={output.features.text_risk}")
+        print(f"audio_affect_probs={output.features.audio_affect_probs}")
+        print(f"visual_affect_probs={output.features.visual_affect_probs}")
+        print(f"visual_embedding_head={output.features.visual_embedding[:5] if output.features.visual_embedding else None}")
 
 
 if __name__ == "__main__":

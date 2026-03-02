@@ -1,4 +1,4 @@
-# Multimodal Depression Risk Estimation (Modular Skeleton)
+# Multimodal Depression Risk Estimation
 
 This repository contains a class-based implementation for a multimodal depression risk estimation system.
 

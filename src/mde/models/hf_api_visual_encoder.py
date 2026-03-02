@@ -95,10 +95,10 @@ class HFAPIVisualEncoder:
                 path = Path(frame)
                 if not path.exists() or not path.is_file():
                     continue
-                with path.open("rb") as f:
-                    raw = f.read()
+                # This client/provider combination expects a local path/URL or raw bytes.
+                # Passing the path string allows the client to infer content type.
                 rows = self.client.image_classification(
-                    raw,
+                    str(path),
                     model=self.affect_model_name,
                 )
                 parsed = self._normalize_rows(rows)
