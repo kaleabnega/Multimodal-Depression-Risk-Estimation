@@ -18,6 +18,7 @@ This repository contains a class-based implementation for a multimodal depressio
 PYTHONPATH=src python scripts/run_demo.py \
   --backend hf_api \
   --response-backend guarded_llm \
+  --response-model mistralai/Mistral-7B-Instruct-v0.3 \
   --text "I have felt very low this week"
 ```
 
@@ -37,6 +38,7 @@ Notes:
 - `--frames` should be image file paths.
 - Default backend is `hf_api`. Use `--backend local` for local `transformers` inference.
 - Default response backend is `guarded_llm`. Use `--response-backend template` for deterministic templates only.
+- Override responder LLM with `--response-model <model_id>` if your provider does not support the default.
 - Set token with `--hf-api-token` or environment variable `HF_API_TOKEN` (or `HUGGINGFACE_HUB_TOKEN`).
 - `scripts/run_demo.py` auto-loads `.env` from project root, so `HF_API_TOKEN=...` in `.env` works directly.
 - Local backend uses `load_pretrained=True` and `allow_fallback=False` by default.

@@ -90,6 +90,7 @@ def build_pipeline(
     local_files_only: bool = False,
     allow_fallback: bool = False,
     api_token: str | None = None,
+    response_model: str = "mistralai/Mistral-7B-Instruct-v0.3",
 ) -> DepressionRiskPipeline:
     if backend == "hf_api":
         encoder = MultimodalEncoder(
@@ -129,6 +130,7 @@ def build_pipeline(
 
     if response_backend == "guarded_llm":
         responder = GuardedLLMResponseGenerator(
+            model_name=response_model,
             api_token=api_token,
             allow_fallback=allow_fallback,
             use_llm_for_high_risk=False,
@@ -158,6 +160,11 @@ def _parse_args() -> argparse.Namespace:
         default="guarded_llm",
         choices=["guarded_llm", "template"],
         help="Response generator backend",
+    )
+    parser.add_argument(
+        "--response-model",
+        default="mistralai/Mistral-7B-Instruct-v0.3",
+        help="LLM model id for guarded_llm response backend",
     )
     parser.add_argument("--audio-wav", help="Path to 16kHz WAV audio file")
     parser.add_argument("--frames", nargs="*", default=None, help="Frame image file paths")
@@ -191,6 +198,7 @@ def main() -> None:
         local_files_only=args.local_files_only,
         allow_fallback=args.allow_fallback,
         api_token=api_token,
+        response_model=args.response_model,
     )
 
     audio = _read_wav_16khz_mono(args.audio_wav) if args.audio_wav else None

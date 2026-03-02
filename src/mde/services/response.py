@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from mde.core.types import AgentInput, PolicyState
 
@@ -57,12 +57,18 @@ class GuardedLLMResponseGenerator:
 
     def __init__(
         self,
-        model_name: str = "HuggingFaceH4/zephyr-7b-beta",
+        model_name: str = "mistralai/Mistral-7B-Instruct-v0.3",
         api_token: Optional[str] = None,
         allow_fallback: bool = True,
         use_llm_for_high_risk: bool = False,
     ) -> None:
         self.model_name = model_name
+        self.model_candidates = [
+            model_name,
+            "mistralai/Mistral-7B-Instruct-v0.3",
+            "meta-llama/Llama-3.1-8B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct",
+        ]
         self.allow_fallback = allow_fallback
         self.use_llm_for_high_risk = use_llm_for_high_risk
         self.template = TemplateResponseGenerator()
@@ -125,19 +131,104 @@ class GuardedLLMResponseGenerator:
         if self.client is None:
             raise RuntimeError("huggingface_hub is not installed")
 
-        output = self.client.text_generation(
-            prompt,
-            model=self.model_name,
-            max_new_tokens=220,
-            temperature=0.4,
-            top_p=0.9,
-            repetition_penalty=1.05,
-            do_sample=True,
-        )
-        text = output if isinstance(output, str) else str(output)
-        if "Assistant response:" in text:
-            text = text.split("Assistant response:", 1)[1]
-        return text.strip()
+        # Prefer conversational endpoints because some providers expose chat-only tasks
+        # for instruct/chat models (e.g., Zephyr).
+        chat_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a safe mental-health support assistant. "
+                    "Do not diagnose and do not provide self-harm instructions."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+        last_error: Exception | None = None
+        for model_name in self.model_candidates:
+            try:
+                if hasattr(self.client, "chat_completion"):
+                    response = self.client.chat_completion(
+                        model=model_name,
+                        messages=chat_messages,
+                        max_tokens=220,
+                        temperature=0.4,
+                        top_p=0.9,
+                    )
+                    text = self._extract_chat_text(response)
+                    if text:
+                        return text.strip()
+            except Exception as exc:  # pragma: no cover - depends on runtime client/provider
+                last_error = exc
+
+            try:
+                chat_api = getattr(self.client, "chat", None)
+                completions = getattr(chat_api, "completions", None) if chat_api else None
+                create = getattr(completions, "create", None) if completions else None
+                if callable(create):
+                    response = create(
+                        model=model_name,
+                        messages=chat_messages,
+                        max_tokens=220,
+                        temperature=0.4,
+                        top_p=0.9,
+                    )
+                    text = self._extract_chat_text(response)
+                    if text:
+                        return text.strip()
+            except Exception as exc:  # pragma: no cover - depends on runtime client/provider
+                last_error = exc
+
+            try:
+                output = self.client.text_generation(
+                    prompt,
+                    model=model_name,
+                    max_new_tokens=220,
+                    temperature=0.4,
+                    top_p=0.9,
+                    repetition_penalty=1.05,
+                    do_sample=True,
+                )
+                text = output if isinstance(output, str) else str(output)
+                if "Assistant response:" in text:
+                    text = text.split("Assistant response:", 1)[1]
+                text = text.strip()
+                if text:
+                    return text
+            except Exception as exc:
+                last_error = exc
+
+        if last_error is not None:
+            raise RuntimeError(
+                "No supported response model found for your enabled HF providers. "
+                "Set a supported model with --response-model."
+            ) from last_error
+        raise RuntimeError("Unable to generate LLM response")
+
+    def _extract_chat_text(self, response: Any) -> str:
+        choices = getattr(response, "choices", None)
+        if choices:
+            first = choices[0]
+            message = getattr(first, "message", None)
+            content = getattr(message, "content", None) if message is not None else None
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = [part.get("text", "") for part in content if isinstance(part, dict)]
+                return "".join(parts).strip()
+
+        if isinstance(response, dict):
+            raw_choices = response.get("choices", [])
+            if raw_choices:
+                msg = raw_choices[0].get("message", {})
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, list):
+                    parts = [part.get("text", "") for part in content if isinstance(part, dict)]
+                    return "".join(parts).strip()
+
+        return ""
 
     def generate(self, data: AgentInput) -> str:
         # Crisis path is deterministic and never delegated to LLM.
