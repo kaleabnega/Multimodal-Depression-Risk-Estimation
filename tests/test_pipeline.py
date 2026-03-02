@@ -1,4 +1,4 @@
-from mde.core.types import PolicyState, TurnInput
+from mde.core.types import PolicyState, UserInput
 from mde.models.audio_encoder import AudioEncoder
 from mde.models.fusion import MaskedFusionMLP
 from mde.models.multimodal_encoder import MultimodalEncoder
@@ -10,10 +10,14 @@ from mde.services.response import TemplateResponseGenerator
 
 
 def _build_pipeline() -> DepressionRiskPipeline:
-    encoder = MultimodalEncoder(TextEncoder(), AudioEncoder(), VisualEncoder())
+    encoder = MultimodalEncoder(
+        TextEncoder(load_pretrained=False),
+        AudioEncoder(load_pretrained=False),
+        VisualEncoder(load_pretrained=False),
+    )
     return DepressionRiskPipeline(
         encoder=encoder,
-        fusion=MaskedFusionMLP(),
+        fusion=MaskedFusionMLP(text_dim=384, audio_dim=8, visual_dim=8),
         policy=SafetyPolicyEngine(),
         responder=TemplateResponseGenerator(),
     )
@@ -21,7 +25,7 @@ def _build_pipeline() -> DepressionRiskPipeline:
 
 def test_text_only_flow_runs() -> None:
     pipeline = _build_pipeline()
-    out = pipeline.run_turn(TurnInput(text="I feel sad and tired"))
+    out = pipeline.run_user_input(UserInput(text="I feel sad and tired"))
 
     assert 0.0 <= out.fusion.risk_score <= 1.0
     assert out.fusion.modality_mask == [1, 0, 0]
@@ -29,7 +33,7 @@ def test_text_only_flow_runs() -> None:
 
 def test_crisis_language_overrides_score() -> None:
     pipeline = _build_pipeline()
-    out = pipeline.run_turn(TurnInput(text="I want to die"))
+    out = pipeline.run_user_input(UserInput(text="I want to die"))
 
     assert out.policy.state == PolicyState.CRISIS_PROTOCOL
     assert "988" in out.response

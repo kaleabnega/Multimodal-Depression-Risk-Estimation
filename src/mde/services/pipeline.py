@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mde.core.types import AgentInput, PipelineOutput, TurnInput
+from mde.core.types import AgentInput, PipelineOutput, UserInput
 from mde.models.multimodal_encoder import MultimodalEncoder
 from mde.models.fusion import MaskedFusionMLP
 from mde.services.policy import SafetyPolicyEngine
@@ -22,14 +22,14 @@ class DepressionRiskPipeline:
         self.policy = policy
         self.responder = responder
 
-    def run_turn(self, turn: TurnInput) -> PipelineOutput:
-        features, audio_summary, visual_summary = self.encoder.encode(turn)
+    def run_user_input(self, user_input: UserInput) -> PipelineOutput:
+        features, audio_summary, visual_summary = self.encoder.encode(user_input)
         fusion_out = self.fusion.predict(features)
-        policy_out = self.policy.decide(text=turn.text, risk_score=fusion_out.risk_score)
+        policy_out = self.policy.decide(text=user_input.text, risk_score=fusion_out.risk_score)
 
         response = self.responder.generate(
             AgentInput(
-                user_text=turn.text,
+                user_text=user_input.text,
                 risk_score=fusion_out.risk_score,
                 policy_state=policy_out.state,
                 audio_summary=audio_summary,

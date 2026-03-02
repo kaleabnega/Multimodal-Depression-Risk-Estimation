@@ -8,13 +8,13 @@ from mde.core.types import (
     ModalityFeatures,
     PipelineOutput,
     PolicyDecision,
-    TurnInput,
+    UserInput,
 )
 
 
 class Encoder(ABC):
     @abstractmethod
-    def encode(self, turn: TurnInput) -> ModalityFeatures:
+    def encode(self, user_input: UserInput) -> ModalityFeatures:
         raise NotImplementedError
 
 
@@ -38,5 +38,5 @@ class ResponseGenerator(ABC):
 
 class RiskPipeline(ABC):
     @abstractmethod
-    def run_turn(self, turn: TurnInput) -> PipelineOutput:
+    def run_user_input(self, user_input: UserInput) -> PipelineOutput:
         raise NotImplementedError

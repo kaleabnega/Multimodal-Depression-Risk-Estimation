@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 
 @dataclass
-class TurnInput:
-    """Raw user turn input across modalities."""
+class UserInput:
+    """Raw user input across modalities."""
 
     text: str
     audio: Optional[list[float]] = None
@@ -16,7 +16,7 @@ class TurnInput:
 
 @dataclass
 class ModalityFeatures:
-    """Encoder outputs for one turn."""
+    """Encoder outputs for one user input."""
 
     text_embedding: list[float]
     text_risk: Optional[float] = None
