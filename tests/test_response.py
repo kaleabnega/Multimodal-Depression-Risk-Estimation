@@ -9,6 +9,7 @@ def _agent_input(state: PolicyState) -> AgentInput:
         policy_state=state,
         audio_summary=None,
         visual_summary=None,
+        visual_affect_probs=None,
     )
 
 
@@ -34,3 +35,40 @@ def test_safe_llm_output_is_used() -> None:
 
     out = responder.generate(_agent_input(PolicyState.NORMAL_SUPPORT))
     assert "thank you for sharing" in out.lower()
+
+
+def test_visual_question_uses_visual_affect_probs() -> None:
+    responder = GuardedLLMResponseGenerator(allow_fallback=True)
+    data = AgentInput(
+        user_text="How is my facial expression?",
+        risk_score=0.20,
+        policy_state=PolicyState.NORMAL_SUPPORT,
+        visual_affect_probs=[0.10, 0.20, 0.70],
+    )
+    out = responder.generate(data)
+    assert "positive/engaged" in out.lower()
+
+
+def test_visual_question_high_confidence_can_use_llm() -> None:
+    responder = GuardedLLMResponseGenerator(allow_fallback=True)
+    responder._generate_llm = lambda _: "You look mostly positive/engaged in this clip with reasonably high confidence."
+    data = AgentInput(
+        user_text="How is my facial expression?",
+        risk_score=0.20,
+        policy_state=PolicyState.NORMAL_SUPPORT,
+        visual_affect_probs=[0.05, 0.15, 0.80],
+    )
+    out = responder.generate(data)
+    assert "positive/engaged" in out.lower()
+
+
+def test_visual_question_low_signal_message() -> None:
+    responder = GuardedLLMResponseGenerator(allow_fallback=True)
+    data = AgentInput(
+        user_text="Do I look okay in this video?",
+        risk_score=0.20,
+        policy_state=PolicyState.NORMAL_SUPPORT,
+        visual_affect_probs=[0.34, 0.33, 0.33],
+    )
+    out = responder.generate(data)
+    assert "confidence is low" in out.lower()

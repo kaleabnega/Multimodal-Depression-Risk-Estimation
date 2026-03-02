@@ -56,6 +56,7 @@ class AgentInput:
     policy_state: PolicyState
     audio_summary: Optional[str] = None
     visual_summary: Optional[str] = None
+    visual_affect_probs: Optional[list[float]] = None
 
 
 @dataclass

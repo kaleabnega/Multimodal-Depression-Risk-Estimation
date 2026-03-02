@@ -11,6 +11,76 @@ except ImportError:  # pragma: no cover - optional runtime dependency
     InferenceClient = None
 
 
+def _is_visual_expression_query(text: str) -> bool:
+    lowered = text.lower()
+    has_visual_reference = any(token in lowered for token in ["face", "facial", "expression", "look", "smile", "video"])
+    has_question_intent = any(token in lowered for token in ["how", "what", "do i", "am i", "?"])
+    return has_visual_reference and has_question_intent
+
+
+def _format_visual_expression_response(affect_probs: Optional[list[float]]) -> Optional[str]:
+    if not affect_probs or len(affect_probs) < 3:
+        return "I do not have enough visual signal to estimate your facial expression reliably from this input."
+
+    sad, neutral, engaged = [max(0.0, float(x)) for x in affect_probs[:3]]
+    total = sad + neutral + engaged
+    if total <= 0.0:
+        return "I do not have enough visual signal to estimate your facial expression reliably from this input."
+
+    sad /= total
+    neutral /= total
+    engaged /= total
+    probs = [sad, neutral, engaged]
+    labels = ["sad/low-affect", "neutral", "positive/engaged"]
+    best_idx = max(range(3), key=lambda i: probs[i])
+    confidence = probs[best_idx]
+
+    if confidence < 0.50:
+        return (
+            "The visual signal is mixed, so confidence is low. "
+            f"Estimated distribution: sad/low-affect {sad:.0%}, neutral {neutral:.0%}, positive/engaged {engaged:.0%}."
+        )
+
+    return (
+        f"From the visual cues, your expression appears mostly {labels[best_idx]} "
+        f"(confidence {confidence:.0%}). "
+        f"Estimated distribution: sad/low-affect {sad:.0%}, neutral {neutral:.0%}, positive/engaged {engaged:.0%}."
+    )
+
+
+def _visual_affect_context(affect_probs: Optional[list[float]]) -> dict[str, Any]:
+    if not affect_probs or len(affect_probs) < 3:
+        return {
+            "available": False,
+            "dominant_label": "unknown",
+            "confidence": 0.0,
+            "distribution": {"sad_low_affect": 0.0, "neutral": 0.0, "positive_engaged": 0.0},
+        }
+
+    sad, neutral, engaged = [max(0.0, float(x)) for x in affect_probs[:3]]
+    total = sad + neutral + engaged
+    if total <= 0.0:
+        return {
+            "available": False,
+            "dominant_label": "unknown",
+            "confidence": 0.0,
+            "distribution": {"sad_low_affect": 0.0, "neutral": 0.0, "positive_engaged": 0.0},
+        }
+
+    sad /= total
+    neutral /= total
+    engaged /= total
+    probs = [sad, neutral, engaged]
+    labels = ["sad/low-affect", "neutral", "positive/engaged"]
+    best_idx = max(range(3), key=lambda i: probs[i])
+    return {
+        "available": True,
+        "dominant_label": labels[best_idx],
+        "confidence": probs[best_idx],
+        "distribution": {"sad_low_affect": sad, "neutral": neutral, "positive_engaged": engaged},
+    }
+
+
 class TemplateResponseGenerator:
     """Policy-gated response templates with optional cue summaries."""
 
@@ -21,6 +91,11 @@ class TemplateResponseGenerator:
         )
 
     def generate(self, data: AgentInput) -> str:
+        if _is_visual_expression_query(data.user_text):
+            visual_answer = _format_visual_expression_response(data.visual_affect_probs)
+            if visual_answer:
+                return visual_answer
+
         if data.policy_state == PolicyState.CRISIS_PROTOCOL:
             return self.crisis_line
 
@@ -85,6 +160,7 @@ class GuardedLLMResponseGenerator:
         ]
 
     def _prompt(self, data: AgentInput) -> str:
+        visual_ctx = _visual_affect_context(data.visual_affect_probs)
         cue_parts: list[str] = []
         if data.audio_summary and data.audio_summary != "no audio cues":
             cue_parts.append(f"audio={data.audio_summary}")
@@ -100,9 +176,12 @@ class GuardedLLMResponseGenerator:
             "3) Do not provide self-harm instructions.\n"
             "4) Suggest professional support when risk is high.\n"
             "5) Use plain language.\n\n"
+            "If user asks specifically about facial expression, answer from visual_affect context "
+            "with confidence and avoid depression conclusions.\n\n"
             f"Policy state: {data.policy_state.value}\n"
             f"Risk score: {data.risk_score:.3f}\n"
             f"Observed cues: {cues}\n"
+            f"Visual affect context: {visual_ctx}\n"
             f"User message: {data.user_text}\n\n"
             "Assistant response:"
         )
@@ -231,6 +310,13 @@ class GuardedLLMResponseGenerator:
         return ""
 
     def generate(self, data: AgentInput) -> str:
+        if _is_visual_expression_query(data.user_text):
+            visual_ctx = _visual_affect_context(data.visual_affect_probs)
+            if not visual_ctx["available"] or visual_ctx["confidence"] < 0.50:
+                visual_answer = _format_visual_expression_response(data.visual_affect_probs)
+                if visual_answer:
+                    return visual_answer
+
         # Crisis path is deterministic and never delegated to LLM.
         if data.policy_state == PolicyState.CRISIS_PROTOCOL:
             return self.template.generate(data)

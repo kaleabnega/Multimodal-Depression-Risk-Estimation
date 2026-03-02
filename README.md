@@ -69,6 +69,8 @@ Notes:
 - `--frames` should be image file paths.
 - `--video` extracts frames and runs a local face pipeline (detect/crop/filter) before visual inference.
 - Install optional vision dependencies for video/face pipeline: `pip install -e .[vision]`.
+- Explicit visual questions (for example, "How is my facial expression?") return a visual-expression summary with confidence when visual cues are available.
+- For guarded LLM responses, structured visual context (dominant label, confidence, distribution) is included in the prompt.
 - Default backend is `hf_api`. Use `--backend local` for local `transformers` inference.
 - Default response backend is `guarded_llm`. Use `--response-backend template` for deterministic templates only.
 - Override responder LLM with `--response-model <model_id>` if your provider does not support the default.

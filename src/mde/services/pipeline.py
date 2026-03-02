@@ -34,6 +34,7 @@ class DepressionRiskPipeline:
                 policy_state=policy_out.state,
                 audio_summary=audio_summary,
                 visual_summary=visual_summary,
+                visual_affect_probs=features.visual_affect_probs,
             )
         )
 
