@@ -85,3 +85,22 @@ Notes:
 - Encoders include fallback behavior when model loading fails or dependencies are missing.
 - Train/calibrate the fusion head on labeled data (e.g., PHQ-derived labels) before deployment.
 - This system is for screening support research, not medical diagnosis.
+
+## Web Interface
+
+A React + Vite web interface is available in `web/`.
+
+Start backend API:
+
+```bash
+pip install -e ".[api]"
+PYTHONPATH=src python scripts/run_api.py
+```
+
+In a second terminal, start frontend:
+
+```bash
+cd web
+npm install
+npm run dev
+```

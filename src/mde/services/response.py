@@ -89,14 +89,17 @@ class TemplateResponseGenerator:
             "I am really glad you shared this. You may be in immediate danger, and it is important to contact "
             "local emergency services or a crisis hotline right now. If you are in the U.S., call or text 988."
         )
+        self.last_generation_meta: dict[str, Any] = {"source": "template"}
 
     def generate(self, data: AgentInput) -> str:
         if _is_visual_expression_query(data.user_text):
             visual_answer = _format_visual_expression_response(data.visual_affect_probs)
             if visual_answer:
+                self.last_generation_meta = {"source": "template_visual"}
                 return visual_answer
 
         if data.policy_state == PolicyState.CRISIS_PROTOCOL:
+            self.last_generation_meta = {"source": "template_crisis"}
             return self.crisis_line
 
         cue_parts: list[str] = []
@@ -110,17 +113,20 @@ class TemplateResponseGenerator:
             cue_text = " I also noticed " + "; ".join(cue_parts) + "."
 
         if data.policy_state == PolicyState.HIGH_RISK_SUPPORT:
+            self.last_generation_meta = {"source": "template_high_risk"}
             return (
                 "Thank you for sharing this. It sounds like you are carrying a lot right now. "
                 "You deserve support from a licensed mental health professional, and reaching out today could help." + cue_text
             )
 
         if data.policy_state == PolicyState.GENTLE_MONITORING:
+            self.last_generation_meta = {"source": "template_monitoring"}
             return (
                 "I hear you. If you want, we can slow this down and talk through what has felt heaviest lately. "
                 "I can also share coping steps and support options." + cue_text
             )
 
+        self.last_generation_meta = {"source": "template_normal"}
         return (
             "Thanks for opening up. I can help with reflective prompts, coping strategies, "
             "or practical mental health resources based on what you need next."
@@ -148,6 +154,8 @@ class GuardedLLMResponseGenerator:
         self.use_llm_for_high_risk = use_llm_for_high_risk
         self.template = TemplateResponseGenerator()
         self.client = InferenceClient(token=api_token) if InferenceClient is not None else None
+        self.last_generation_meta: dict[str, Any] = {"source": "unknown"}
+        self._last_model_used: str | None = None
 
         self._unsafe_patterns = [
             r"\bdiagnos(?:e|ed|is)\b",
@@ -236,6 +244,7 @@ class GuardedLLMResponseGenerator:
                     )
                     text = self._extract_chat_text(response)
                     if text:
+                        self._last_model_used = model_name
                         return text.strip()
             except Exception as exc:  # pragma: no cover - depends on runtime client/provider
                 last_error = exc
@@ -254,6 +263,7 @@ class GuardedLLMResponseGenerator:
                     )
                     text = self._extract_chat_text(response)
                     if text:
+                        self._last_model_used = model_name
                         return text.strip()
             except Exception as exc:  # pragma: no cover - depends on runtime client/provider
                 last_error = exc
@@ -273,6 +283,7 @@ class GuardedLLMResponseGenerator:
                     text = text.split("Assistant response:", 1)[1]
                 text = text.strip()
                 if text:
+                    self._last_model_used = model_name
                     return text
             except Exception as exc:
                 last_error = exc
@@ -315,23 +326,46 @@ class GuardedLLMResponseGenerator:
             if not visual_ctx["available"] or visual_ctx["confidence"] < 0.50:
                 visual_answer = _format_visual_expression_response(data.visual_affect_probs)
                 if visual_answer:
+                    self.last_generation_meta = {
+                        "source": "template_visual_low_confidence",
+                        "visual_confidence": visual_ctx["confidence"],
+                    }
                     return visual_answer
 
         # Crisis path is deterministic and never delegated to LLM.
         if data.policy_state == PolicyState.CRISIS_PROTOCOL:
-            return self.template.generate(data)
+            out = self.template.generate(data)
+            self.last_generation_meta = self.template.last_generation_meta
+            return out
 
         if data.policy_state == PolicyState.HIGH_RISK_SUPPORT and not self.use_llm_for_high_risk:
-            return self.template.generate(data)
+            out = self.template.generate(data)
+            self.last_generation_meta = self.template.last_generation_meta
+            return out
 
         try:
             generated = self._generate_llm(self._prompt(data))
             if self._is_safe(generated, data.policy_state):
+                self.last_generation_meta = {
+                    "source": "llm",
+                    "model": self._last_model_used or self.model_name,
+                }
                 return generated
             if not self.allow_fallback:
                 raise ValueError("LLM output did not pass safety validation")
-            return self.template.generate(data)
-        except Exception:
+            out = self.template.generate(data)
+            self.last_generation_meta = {
+                "source": "template_fallback_unsafe",
+                "model": self._last_model_used or self.model_name,
+            }
+            return out
+        except Exception as exc:
             if not self.allow_fallback:
                 raise
-            return self.template.generate(data)
+            out = self.template.generate(data)
+            self.last_generation_meta = {
+                "source": "template_fallback_error",
+                "error": str(exc),
+                "model": self._last_model_used or self.model_name,
+            }
+            return out

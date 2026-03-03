@@ -17,6 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 vision = ["opencv-python>=4.10.0"]
+api = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
