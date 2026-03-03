@@ -16,9 +16,9 @@ export async function sendMessage(payload) {
       form.append("video_fps", String(payload.video_fps ?? 2));
       form.append("max_frames", String(payload.max_frames ?? 8));
       res = await fetch(
-        // "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat-upload",
+        "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat-upload",
 
-        "/api/chat-upload",
+        // "/api/chat-upload",
 
         {
           method: "POST",
@@ -27,9 +27,9 @@ export async function sendMessage(payload) {
       );
     } else {
       res = await fetch(
-        // "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat",
+        "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat",
 
-        "/api/chat",
+        // "/api/chat",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
