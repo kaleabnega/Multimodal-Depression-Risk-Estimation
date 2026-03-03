@@ -63,6 +63,13 @@ export default function App() {
     setIsSending(false);
   }
 
+  function handleVideoChange(event) {
+    const file = event.target.files?.[0] ?? null;
+    setVideoFile(file);
+    // Reset the native input so selecting the same file again triggers onChange.
+    event.target.value = "";
+  }
+
   function handleClearChats() {
     setMessages(initialMessages);
     setInput("");
@@ -93,7 +100,7 @@ export default function App() {
             selectedVideo={videoFile}
             isSending={isSending}
             onChange={setInput}
-            onVideoChange={(event) => setVideoFile(event.target.files?.[0] ?? null)}
+            onVideoChange={handleVideoChange}
             onClearVideo={() => setVideoFile(null)}
             onSend={handleSend}
           />
