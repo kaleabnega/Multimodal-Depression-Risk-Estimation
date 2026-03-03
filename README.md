@@ -1,103 +1,132 @@
 # Multimodal Depression Risk Estimation
 
-This repository contains a class-based implementation for a multimodal depression risk estimation system.
+A multimodal mental-health support prototype that combines text, audio, and visual cues to:
 
-## Architecture
+- estimate a risk score,
+- apply a safety policy,
+- generate guarded, empathetic responses.
 
-- `TextEncoder`: Hugging Face embedding model + optional text risk classifier.
-- `AudioEncoder`: Hugging Face speech embedding + emotion classifier.
-- `VisualEncoder`: Hugging Face vision embedding + facial expression classifier.
-- `MaskedFusionMLP`: fuses modalities with missing-modality masks.
-- `SafetyPolicyEngine`: maps score + crisis language to policy state.
-- `TemplateResponseGenerator`: returns policy-gated safe responses.
-- `DepressionRiskPipeline`: end-to-end orchestrator.
+This project is built for **screening-support and conversational assistance research**, not medical diagnosis.
 
-## Run Demo
+## What This Project Does
+
+The system supports different input combinations:
+
+- text only,
+- text + audio,
+- text + video,
+- text + audio + video,
+- audio-to-text via ASR (optional).
+
+At runtime, it:
+
+1. encodes each available modality,
+2. fuses modality signals into a risk score,
+3. maps risk + language checks to a policy state,
+4. generates a response (guarded LLM or template fallback).
+
+## Core Capabilities
+
+- Hugging Face API-backed text/audio/visual encoders.
+- Optional local transformer-based encoder path.
+- Video frame extraction + face preprocessing pipeline.
+- ASR module to inject transcript into text branch.
+- Visual-expression-aware response mode.
+- Crisis-aware policy routing.
+- Web API + React UI.
+- Response telemetry (`response_source`, `response_model`) to verify LLM vs fallback path.
+
+## Repository Structure
+
+- `src/mde/models/`: modality encoders and fusion.
+- `src/mde/services/`: policy, response generation, pipeline orchestration.
+- `src/mde/utils/`: vision pipeline utilities.
+- `src/mde/api/server.py`: FastAPI backend.
+- `src/mde/runtime.py`: shared pipeline builder.
+- `scripts/run_demo.py`: CLI runner.
+- `scripts/run_api.py`: API runner.
+- `web/`: React + Vite frontend.
+- `tests/`: basic pipeline/response tests.
+
+## Architecture Summary
+
+### 1) Input Layer
+
+`UserInput` supports:
+
+- `text: str` (required after ASR merge step),
+- `audio: list[float] | None`,
+- `frames: list[str] | None`.
+
+### 2) Modality Encoders
+
+- Text encoder -> `text_embedding`, `text_risk`.
+- Audio encoder -> `audio_embedding`, `audio_affect_probs`.
+- Visual encoder -> `visual_embedding`, `visual_affect_probs`.
+
+### 3) Fusion
+
+`MaskedFusionMLP` combines embeddings and modality mask into `risk_score`.
+
+Note: fusion is currently placeholder-weighted (not yet trained on labeled data).
+
+### 4) Policy
+
+Risk score + crisis language checks -> policy states:
+
+- `NORMAL_SUPPORT`
+- `GENTLE_MONITORING`
+- `HIGH_RISK_SUPPORT`
+- `CRISIS_PROTOCOL`
+
+### 5) Response
+
+- `GuardedLLMResponseGenerator` (primary)
+- `TemplateResponseGenerator` (fallback)
+
+Response metadata is exposed to API/UI:
+
+- `response_source` (e.g. `llm`, `template_fallback_error`)
+- `response_model`
+
+## Local Setup
+
+### Python backend
 
 ```bash
-PYTHONPATH=src python scripts/run_demo.py \
-  --backend hf_api \
-  --response-backend guarded_llm \
-  --response-model mistralai/Mistral-7B-Instruct-v0.3 \
-  --text "I have felt very low this week"
-```
-
-For full multimodal pretrained inference:
-
-```bash
-PYTHONPATH=src python scripts/run_demo.py \
-  --backend hf_api \
-  --response-backend guarded_llm \
-  --text "I feel empty and tired lately" \
-  --audio-wav /absolute/path/to/audio_16khz.wav \
-  --frames /absolute/path/to/frame1.jpg /absolute/path/to/frame2.jpg
-```
-
-Audio transcription into text branch (ASR):
-
-```bash
-PYTHONPATH=src python scripts/run_demo.py \
-  --backend hf_api \
-  --asr-from-audio \
-  --audio-wav /absolute/path/to/audio_16khz.wav
-```
-
-Combine typed text + spoken transcript:
-
-```bash
-PYTHONPATH=src python scripts/run_demo.py \
-  --backend hf_api \
-  --text "I want to add context" \
-  --asr-from-audio \
-  --audio-wav /absolute/path/to/audio_16khz.wav
-```
-
-Video-based visual inference with face preprocessing:
-
-```bash
-PYTHONPATH=src python scripts/run_demo.py \
-  --backend hf_api \
-  --text "I feel okay today" \
-  --video /absolute/path/to/clip.mp4 \
-  --video-fps 1.0 \
-  --max-frames 8
-```
-
-Notes:
-- `--audio-wav` must be a 16kHz WAV file.
-- `--asr-from-audio` uses HF ASR API and injects transcript into the text branch.
-- `--frames` should be image file paths.
-- `--video` extracts frames and runs a local face pipeline (detect/crop/filter) before visual inference.
-- Install optional vision dependencies for video/face pipeline: `pip install -e .[vision]`.
-- Explicit visual questions (for example, "How is my facial expression?") return a visual-expression summary with confidence when visual cues are available.
-- For guarded LLM responses, structured visual context (dominant label, confidence, distribution) is included in the prompt.
-- Default backend is `hf_api`. Use `--backend local` for local `transformers` inference.
-- Default response backend is `guarded_llm`. Use `--response-backend template` for deterministic templates only.
-- Override responder LLM with `--response-model <model_id>` if your provider does not support the default.
-- Set token with `--hf-api-token` or environment variable `HF_API_TOKEN` (or `HUGGINGFACE_HUB_TOKEN`).
-- `scripts/run_demo.py` auto-loads `.env` from project root, so `HF_API_TOKEN=...` in `.env` works directly.
-- Local backend uses `load_pretrained=True` and `allow_fallback=False` by default.
-- Add `--allow-fallback` if you want to proceed when model loading fails.
-- Add `--local-files-only` to force model loading from local Hugging Face cache only.
-
-## Notes
-
-- Encoders include fallback behavior when model loading fails or dependencies are missing.
-- Train/calibrate the fusion head on labeled data (e.g., PHQ-derived labels) before deployment.
-- This system is for screening support research, not medical diagnosis.
-
-## Web Interface
-
-A React + Vite web interface is available in `web/`.
-
-Start backend API:
-
-```bash
+cd /path/to/multimodal-depression-risk-estimation
+python -m venv venv
+source venv/bin/activate
+pip install -e .
 pip install -e ".[api]"
-PYTHONPATH=src python scripts/run_api.py
+pip install -e ".[vision]"   # optional but needed for video face pipeline
 ```
 
-In a second terminal, start frontend:
+### Environment variables
+
+Create `.env` in repo root:
+
+```env
+HF_API_TOKEN=hf_xxx
+# optional
+MDE_RESPONSE_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+```
+
+## Run Backend API
+
+```bash
+python scripts/run_api.py
+```
+
+Health check:
+
+```bash
+curl -s http://127.0.0.1:8000/health
+```
+
+You should see `hf_token_loaded` and active `response_model`.
+
+## Run Frontend
 
 ```bash
 cd web
@@ -105,4 +134,101 @@ npm install
 npm run dev
 ```
 
-The web UI supports direct video upload for expression questions via `POST /api/chat-upload`.
+Open `http://127.0.0.1:5173`.
+
+## API Endpoints
+
+### `POST /api/chat` (JSON)
+
+For text/path-based payloads.
+
+Example:
+
+```bash
+curl -s http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"text":"How are you?","debug":true}'
+```
+
+### `POST /api/chat-upload` (multipart)
+
+For browser uploads (video).
+
+Example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/chat-upload" \
+  -F "text=How is my facial expression?" \
+  -F "video_file=@/absolute/path/to/test-video.mp4"
+```
+
+## CLI Usage
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py --help
+```
+
+Common examples:
+
+Text only:
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --text "I feel a bit overwhelmed"
+```
+
+Video expression question:
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --text "How is my facial expression?" \
+  --video /absolute/path/to/clip.mp4 \
+  --video-fps 2 \
+  --max-frames 8 \
+  --debug
+```
+
+ASR from audio:
+
+```bash
+PYTHONPATH=src python scripts/run_demo.py \
+  --backend hf_api \
+  --asr-from-audio \
+  --audio-wav /absolute/path/to/audio_16khz.wav
+```
+
+## Deployment
+
+### Backend on Railway
+
+Recommended:
+
+- Build: `pip install -r requirements.txt`
+- Start: `uvicorn mde.api.server:app --host 0.0.0.0 --port $PORT --app-dir src`
+
+Make sure Railway environment includes:
+
+- `HF_API_TOKEN`
+- optionally `MDE_RESPONSE_MODEL`
+
+### Frontend on Netlify
+
+For this repo layout:
+
+- Base directory: `web`
+- Build command: `npm run build`
+- Publish directory: `dist`
+
+Set frontend env var:
+
+- `VITE_API_BASE_URL=https://<your-railway-domain>`
+
+Also ensure backend CORS allowlist includes your Netlify domain (no trailing slash).
+
+## Current Limitations
+
+- Fusion network is placeholder-weighted (not trained/calibrated yet).
+- Risk score is useful for flow testing, not clinical inference.
+- Visual quality and provider/model availability can affect expression output.
