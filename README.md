@@ -25,6 +25,12 @@ At runtime, it:
 3. maps risk + language checks to a policy state,
 4. generates a response (guarded LLM or template fallback).
 
+For uploaded audio, the system can:
+
+- run ASR (Whisper via HF Inference API) to recover spoken text,
+- inject transcript into the text branch for response generation,
+- optionally use acoustic features when uploaded audio is 16kHz WAV.
+
 ## Core Capabilities
 
 - Hugging Face API-backed text/audio/visual encoders.
@@ -34,6 +40,7 @@ At runtime, it:
 - Visual-expression-aware response mode.
 - Crisis-aware policy routing.
 - Web API + React UI.
+- UI upload support for video and audio attachments.
 - Response telemetry (`response_source`, `response_model`) to verify LLM vs fallback path.
 
 ## Repository Structure
@@ -152,7 +159,17 @@ curl -s http://127.0.0.1:8000/api/chat \
 
 ### `POST /api/chat-upload` (multipart)
 
-For browser uploads (video).
+For browser uploads (video/audio).
+
+Supported form fields:
+
+- `text` (optional when ASR is enabled and transcript is produced)
+- `video_file` (optional)
+- `audio_file` (optional)
+- `asr_from_audio` (`true/false`, default `true`)
+- `asr_model` (default `openai/whisper-large-v3`)
+- `debug` (`true/false`)
+- `video_fps`, `max_frames`, `skip_face_pipeline`
 
 Example:
 
@@ -160,6 +177,15 @@ Example:
 curl -X POST "http://127.0.0.1:8000/api/chat-upload" \
   -F "text=How is my facial expression?" \
   -F "video_file=@/absolute/path/to/test-video.mp4"
+```
+
+Audio ASR example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/chat-upload" \
+  -F "audio_file=@/absolute/path/to/sample.m4a" \
+  -F "asr_from_audio=true" \
+  -F "debug=true"
 ```
 
 ## CLI Usage
@@ -199,6 +225,11 @@ PYTHONPATH=src python scripts/run_demo.py \
   --audio-wav /absolute/path/to/audio_16khz.wav
 ```
 
+Notes:
+
+- CLI `--audio-wav` path is for 16kHz WAV acoustic branch.
+- API/UI upload can accept common compressed formats for ASR (mp3/m4a/ogg/flac/wav).
+
 ## Deployment
 
 ### Backend on Railway
@@ -227,8 +258,29 @@ Set frontend env var:
 
 Also ensure backend CORS allowlist includes your Netlify domain (no trailing slash).
 
+## ASR Provider Notes
+
+- ASR is configured through Hugging Face `InferenceClient`.
+- The ASR wrapper is set to use `provider="hf-inference"` to avoid paid-provider auto-routing (for example `fal-ai` 402 errors).
+- ASR model/provider availability still depends on your HF account/token and enabled providers.
+
 ## Current Limitations
 
 - Fusion network is placeholder-weighted (not trained/calibrated yet).
 - Risk score is useful for flow testing, not clinical inference.
 - Visual quality and provider/model availability can affect expression output.
+- If ASR fails or returns empty transcript, audio content will not contribute lexical meaning unless text is also provided.
+
+## Troubleshooting
+
+1. `400 text is required (or provide audio with ASR)`:
+You submitted no text and ASR produced empty transcript. Retry with clearer/longer audio or include text manually.
+
+2. `ASR ... 402 Payment Required`:
+Request was routed to a paid provider on HF. Use/keep `hf-inference` provider path and verify account credits/provider access.
+
+3. `Content type "None" not supported` during ASR:
+This happens when raw bytes are sent without a detectable audio content type. Current code sends file paths for ASR to let HF infer MIME type; update to latest code and restart backend.
+
+4. Video upload works locally but fails on deployment with OpenCV errors:
+Install headless OpenCV in deployed backend (`opencv-python-headless`).

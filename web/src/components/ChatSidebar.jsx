@@ -9,7 +9,7 @@ export default function ChatSidebar({ onClearChats }) {
         </div>
       </div>
 
-      <button className="new-chat-btn" type="button" onClick={onClearChats}>
+      <button className="clear-chats-btn" type="button" onClick={onClearChats}>
         Clear Chats
       </button>
 

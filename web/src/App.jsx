@@ -23,11 +23,12 @@ export default function App() {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [videoFile, setVideoFile] = useState(null);
+  const [audioFile, setAudioFile] = useState(null);
   const [isSending, setIsSending] = useState(false);
 
   const canSend = useMemo(
-    () => input.trim().length > 0 && !isSending,
-    [input, isSending],
+    () => (input.trim().length > 0 || Boolean(videoFile) || Boolean(audioFile)) && !isSending,
+    [input, videoFile, audioFile, isSending],
   );
 
   async function handleSend(event) {
@@ -37,16 +38,21 @@ export default function App() {
     const userMessage = {
       id: counter++,
       role: "user",
-      text: input.trim(),
-      meta: videoFile ? { attached_video: videoFile.name } : undefined
+      text: input.trim() || "(media attached)",
+      meta: {
+        ...(videoFile ? { attached_video: videoFile.name } : {}),
+        ...(audioFile ? { attached_audio: audioFile.name } : {}),
+      }
     };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsSending(true);
 
     const result = await sendMessage({
-      text: userMessage.text,
+      text: input.trim(),
       videoFile,
+      audioFile,
+      asr_from_audio: Boolean(audioFile),
       debug: true
     });
 
@@ -60,6 +66,7 @@ export default function App() {
       },
     ]);
     setVideoFile(null);
+    setAudioFile(null);
     setIsSending(false);
   }
 
@@ -70,10 +77,18 @@ export default function App() {
     event.target.value = "";
   }
 
+  function handleAudioChange(event) {
+    const file = event.target.files?.[0] ?? null;
+    setAudioFile(file);
+    // Reset the native input so selecting the same file again triggers onChange.
+    event.target.value = "";
+  }
+
   function handleClearChats() {
     setMessages(initialMessages);
     setInput("");
     setVideoFile(null);
+    setAudioFile(null);
     setIsSending(false);
   }
 
@@ -98,10 +113,14 @@ export default function App() {
           <Composer
             value={input}
             selectedVideo={videoFile}
+            selectedAudio={audioFile}
             isSending={isSending}
+            canSend={canSend}
             onChange={setInput}
             onVideoChange={handleVideoChange}
+            onAudioChange={handleAudioChange}
             onClearVideo={() => setVideoFile(null)}
+            onClearAudio={() => setAudioFile(null)}
             onSend={handleSend}
           />
           <p className="footer-note">

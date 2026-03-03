@@ -1,15 +1,25 @@
 export async function sendMessage(payload) {
   try {
     let res;
-    if (payload.videoFile) {
+    if (payload.videoFile || payload.audioFile) {
       const form = new FormData();
       form.append("text", payload.text ?? "");
-      form.append("video_file", payload.videoFile);
+      if (payload.videoFile) {
+        form.append("video_file", payload.videoFile);
+      }
+      if (payload.audioFile) {
+        form.append("audio_file", payload.audioFile);
+        form.append("asr_from_audio", String(payload.asr_from_audio ?? true));
+        form.append("asr_model", String(payload.asr_model ?? "openai/whisper-large-v3"));
+      }
       form.append("debug", String(Boolean(payload.debug)));
       form.append("video_fps", String(payload.video_fps ?? 2));
       form.append("max_frames", String(payload.max_frames ?? 8));
       res = await fetch(
-        "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat-upload",
+        // "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat-upload",
+
+        "/api/chat-upload",
+
         {
           method: "POST",
           body: form,
@@ -17,7 +27,9 @@ export async function sendMessage(payload) {
       );
     } else {
       res = await fetch(
-        "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat",
+        // "https://multimodal-depression-risk-estimation-production.up.railway.app/api/chat",
+
+        "/api/chat",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -27,7 +39,14 @@ export async function sendMessage(payload) {
     }
 
     if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
+      let detail = `API error: ${res.status}`;
+      try {
+        const errData = await res.json();
+        if (errData?.detail) detail = String(errData.detail);
+      } catch (_) {
+        // Ignore JSON parse errors and keep the status-only message.
+      }
+      throw new Error(detail);
     }
 
     const data = await res.json();
@@ -35,10 +54,10 @@ export async function sendMessage(payload) {
       text: data.response ?? "No response returned.",
       meta: data,
     };
-  } catch (_) {
+  } catch (err) {
     return {
-      text: "Demo mode: backend is not connected yet. Your frontend is ready; connect /api/chat to scripts/run_demo.py via a server wrapper.",
-      meta: { demo_mode: true },
+      text: `Request failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      meta: { request_failed: true },
     };
   }
 }

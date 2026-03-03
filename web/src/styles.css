@@ -67,7 +67,7 @@ body,
   color: var(--text-muted);
 }
 
-.new-chat-btn,
+.clear-chats-btn,
 .history-item {
   width: 100%;
   border: 1px solid var(--line);
@@ -80,7 +80,7 @@ body,
   transition: 180ms ease;
 }
 
-.new-chat-btn:hover,
+.clear-chats-btn:hover,
 .history-item:hover {
   background: var(--bg-3);
 }

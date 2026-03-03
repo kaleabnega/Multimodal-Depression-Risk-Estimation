@@ -155,6 +155,9 @@ def chat(req: ChatRequest) -> ChatResponse:
 async def chat_upload(
     text: str = Form(default=""),
     video_file: Optional[UploadFile] = File(default=None),
+    audio_file: Optional[UploadFile] = File(default=None),
+    asr_from_audio: bool = Form(default=True),
+    asr_model: str = Form(default="openai/whisper-large-v3"),
     debug: bool = Form(default=False),
     video_fps: float = Form(default=1.0),
     max_frames: int = Form(default=10),
@@ -163,6 +166,8 @@ async def chat_upload(
     temp_paths: list[Path] = []
     try:
         video_path: str | None = None
+        audio_wav_path: str | None = None
+        asr_audio_path: str | None = None
         if video_file is not None:
             suffix = Path(video_file.filename or "upload.mp4").suffix or ".mp4"
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
@@ -172,8 +177,23 @@ async def chat_upload(
             temp_paths.append(tmp_path)
             video_path = str(tmp_path)
 
+        if audio_file is not None:
+            suffix = Path(audio_file.filename or "upload.wav").suffix or ".wav"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp_path = Path(tmp.name)
+            with tmp:
+                shutil.copyfileobj(audio_file.file, tmp)
+            temp_paths.append(tmp_path)
+            asr_audio_path = str(tmp_path)
+            if suffix.lower() == ".wav":
+                audio_wav_path = str(tmp_path)
+
         return _run_pipeline(
             text=text,
+            audio_wav=audio_wav_path,
+            asr_audio_path=asr_audio_path,
+            asr_from_audio=asr_from_audio,
+            asr_model=asr_model,
             video=video_path,
             video_fps=video_fps,
             max_frames=max_frames,
@@ -194,6 +214,7 @@ def _run_pipeline(
     *,
     text: str,
     audio_wav: str | None = None,
+    asr_audio_path: str | None = None,
     video: str | None = None,
     frames: Optional[list[str]] = None,
     asr_from_audio: bool = False,
@@ -204,17 +225,35 @@ def _run_pipeline(
     debug: bool = False,
 ) -> ChatResponse:
     final_text = text.strip()
-    audio = _read_wav_16khz_mono(audio_wav) if audio_wav else None
+    audio: list[float] | None = None
+    audio_warning: str | None = None
+    transcript: str = ""
+    asr_error: str | None = None
+    if audio_wav:
+        try:
+            audio = _read_wav_16khz_mono(audio_wav)
+        except ValueError as exc:
+            # If ASR is enabled, degrade gracefully by skipping acoustic features.
+            if asr_from_audio:
+                audio_warning = str(exc)
+                audio = None
+            else:
+                raise
 
     if asr_from_audio:
-        if not audio_wav:
-            raise ValueError("asr_from_audio=true requires audio_wav path")
+        source_audio = asr_audio_path or audio_wav
+        if not source_audio:
+            raise ValueError("asr_from_audio=true requires an uploaded audio file path")
         transcriber = HFAPIAudioTranscriber(
             model_name=asr_model,
             api_token=API_TOKEN,
-            allow_fallback=True,
+            allow_fallback=False,
         )
-        transcript = transcriber.transcribe(audio_wav).strip()
+        try:
+            transcript = transcriber.transcribe(source_audio).strip()
+        except Exception as exc:
+            asr_error = str(exc)
+            raise ValueError(f"ASR failed for model '{asr_model}': {asr_error}") from exc
         if transcript:
             final_text = f"{final_text}\n{transcript}".strip() if final_text else transcript
 
@@ -252,6 +291,12 @@ def _run_pipeline(
         debug_data = {
             "text_len": len(final_text),
             "audio_samples": len(audio) if audio is not None else 0,
+            "audio_warning": audio_warning,
+            "asr_from_audio": asr_from_audio,
+            "asr_model": asr_model,
+            "asr_transcript_len": len(transcript),
+            "asr_transcript_preview": transcript[:180] if transcript else "",
+            "asr_error": asr_error,
             "num_frames_inferred": len(current_frames) if current_frames is not None else 0,
             "text_risk": output.features.text_risk,
             "audio_affect_probs": output.features.audio_affect_probs,
