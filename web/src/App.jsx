@@ -63,9 +63,16 @@ export default function App() {
     setIsSending(false);
   }
 
+  function handleClearChats() {
+    setMessages(initialMessages);
+    setInput("");
+    setVideoFile(null);
+    setIsSending(false);
+  }
+
   return (
     <div className="app-shell">
-      <ChatSidebar />
+      <ChatSidebar onClearChats={handleClearChats} />
       <main className="chat-main">
         <header className="chat-header">
           <h1 className="chat-title">

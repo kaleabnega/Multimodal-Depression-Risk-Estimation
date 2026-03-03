@@ -1,4 +1,4 @@
-export default function ChatSidebar() {
+export default function ChatSidebar({ onClearChats }) {
   return (
     <aside className="chat-sidebar" aria-label="Navigation">
       <div className="brand-lockup">
@@ -9,8 +9,8 @@ export default function ChatSidebar() {
         </div>
       </div>
 
-      <button className="new-chat-btn" type="button">
-        Clear Chat
+      <button className="new-chat-btn" type="button" onClick={onClearChats}>
+        Clear Chats
       </button>
 
       {/* <nav className="sidebar-section" aria-label="Recent">
