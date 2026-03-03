@@ -21,4 +21,5 @@ npm run dev
 ## Notes
 
 - UI posts to `/api/chat` through Vite proxy (`127.0.0.1:8000`).
+- UI supports direct video upload via `/api/chat-upload` for facial-expression questions.
 - Current frontend includes a graceful demo fallback if backend is not connected.

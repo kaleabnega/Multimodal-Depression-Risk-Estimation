@@ -1,10 +1,24 @@
 export async function sendMessage(payload) {
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
+    let res
+    if (payload.videoFile) {
+      const form = new FormData()
+      form.append('text', payload.text ?? '')
+      form.append('video_file', payload.videoFile)
+      form.append('debug', String(Boolean(payload.debug)))
+      form.append('video_fps', String(payload.video_fps ?? 2))
+      form.append('max_frames', String(payload.max_frames ?? 8))
+      res = await fetch('/api/chat-upload', {
+        method: 'POST',
+        body: form
+      })
+    } else {
+      res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    }
 
     if (!res.ok) {
       throw new Error(`API error: ${res.status}`)

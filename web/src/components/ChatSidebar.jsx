@@ -9,17 +9,21 @@ export default function ChatSidebar() {
         </div>
       </div>
 
-      <button className="new-chat-btn" type="button">+ New Chat</button>
+      <button className="new-chat-btn" type="button">
+        Clear Chat
+      </button>
 
-      <nav className="sidebar-section" aria-label="Recent">
+      {/* <nav className="sidebar-section" aria-label="Recent">
         <p className="section-title">Recent</p>
         <button className="history-item" type="button">Facial expression check</button>
         <button className="history-item" type="button">Audio + text reflection</button>
-      </nav>
+      </nav> */}
 
       <div className="sidebar-footer">
-        <p className="safety-note">For support and screening only, not diagnosis.</p>
+        <p className="safety-note">
+          For support and screening only, not diagnosis.
+        </p>
       </div>
     </aside>
-  )
+  );
 }

@@ -22,6 +22,7 @@ const initialMessages = [
 export default function App() {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
+  const [videoFile, setVideoFile] = useState(null);
   const [isSending, setIsSending] = useState(false);
 
   const canSend = useMemo(
@@ -33,12 +34,21 @@ export default function App() {
     event.preventDefault();
     if (!canSend) return;
 
-    const userMessage = { id: counter++, role: "user", text: input.trim() };
+    const userMessage = {
+      id: counter++,
+      role: "user",
+      text: input.trim(),
+      meta: videoFile ? { attached_video: videoFile.name } : undefined
+    };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsSending(true);
 
-    const result = await sendMessage({ text: userMessage.text });
+    const result = await sendMessage({
+      text: userMessage.text,
+      videoFile,
+      debug: true
+    });
 
     setMessages((prev) => [
       ...prev,
@@ -49,6 +59,7 @@ export default function App() {
         meta: result.meta
       },
     ]);
+    setVideoFile(null);
     setIsSending(false);
   }
 
@@ -72,8 +83,11 @@ export default function App() {
         <footer className="chat-footer">
           <Composer
             value={input}
+            selectedVideo={videoFile}
             isSending={isSending}
             onChange={setInput}
+            onVideoChange={(event) => setVideoFile(event.target.files?.[0] ?? null)}
+            onClearVideo={() => setVideoFile(null)}
             onSend={handleSend}
           />
           <p className="footer-note">

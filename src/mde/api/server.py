@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 import wave
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -133,73 +135,139 @@ def health() -> dict[str, str]:
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     try:
-        final_text = req.text.strip()
-        audio = _read_wav_16khz_mono(req.audio_wav) if req.audio_wav else None
+        return _run_pipeline(
+            text=req.text,
+            audio_wav=req.audio_wav,
+            video=req.video,
+            frames=req.frames,
+            asr_from_audio=req.asr_from_audio,
+            asr_model=req.asr_model,
+            video_fps=req.video_fps,
+            max_frames=req.max_frames,
+            skip_face_pipeline=req.skip_face_pipeline,
+            debug=req.debug,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        if req.asr_from_audio:
-            if not req.audio_wav:
-                raise ValueError("asr_from_audio=true requires audio_wav path")
-            transcriber = HFAPIAudioTranscriber(
-                model_name=req.asr_model,
-                api_token=API_TOKEN,
-                allow_fallback=True,
-            )
-            transcript = transcriber.transcribe(req.audio_wav).strip()
-            if transcript:
-                final_text = f"{final_text}\n{transcript}".strip() if final_text else transcript
 
-        if not final_text:
-            raise ValueError("text is required (or provide audio with ASR)")
+@app.post("/api/chat-upload", response_model=ChatResponse)
+async def chat_upload(
+    text: str = Form(default=""),
+    video_file: Optional[UploadFile] = File(default=None),
+    debug: bool = Form(default=False),
+    video_fps: float = Form(default=1.0),
+    max_frames: int = Form(default=10),
+    skip_face_pipeline: bool = Form(default=False),
+) -> ChatResponse:
+    temp_paths: list[Path] = []
+    try:
+        video_path: str | None = None
+        if video_file is not None:
+            suffix = Path(video_file.filename or "upload.mp4").suffix or ".mp4"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp_path = Path(tmp.name)
+            with tmp:
+                shutil.copyfileobj(video_file.file, tmp)
+            temp_paths.append(tmp_path)
+            video_path = str(tmp_path)
 
-        frames: list[str] | None = None
-        face_pipeline = FacePipeline(fps=req.video_fps, max_frames=req.max_frames)
-
-        if req.video:
-            frames = face_pipeline.extract_frames_from_video(req.video)
-
-        if req.frames:
-            validated = []
-            for frame in req.frames:
-                frame_path = Path(frame)
-                if not frame_path.exists() or not frame_path.is_file():
-                    raise FileNotFoundError(f"Frame file not found: {frame_path}")
-                validated.append(str(frame_path))
-            frames = (frames or []) + validated
-
-        if frames and not req.skip_face_pipeline:
-            frames = face_pipeline.process_frames(frames)
-        elif frames:
-            frames = frames[: req.max_frames]
-
-        user_input = UserInput(text=final_text, audio=audio, frames=frames)
-        output = PIPELINE.run_user_input(user_input)
-        responder_meta = getattr(PIPELINE.responder, "last_generation_meta", {}) or {}
-        response_source = str(responder_meta.get("source", "unknown"))
-        response_model = responder_meta.get("model")
-
-        debug = None
-        if req.debug:
-            debug = {
-                "text_len": len(final_text),
-                "audio_samples": len(audio) if audio is not None else 0,
-                "num_frames_inferred": len(frames) if frames is not None else 0,
-                "text_risk": output.features.text_risk,
-                "audio_affect_probs": output.features.audio_affect_probs,
-                "visual_affect_probs": output.features.visual_affect_probs,
-                "responder_meta": responder_meta,
-                "hf_token_loaded": bool(API_TOKEN),
-                "response_model": RESPONSE_MODEL,
-            }
-
-        return ChatResponse(
-            response=output.response,
-            risk_score=output.fusion.risk_score,
-            policy_state=output.policy.state.value,
-            reasons=output.policy.reasons,
-            modality_mask=output.fusion.modality_mask,
-            response_source=response_source,
-            response_model=str(response_model) if response_model is not None else None,
+        return _run_pipeline(
+            text=text,
+            video=video_path,
+            video_fps=video_fps,
+            max_frames=max_frames,
+            skip_face_pipeline=skip_face_pipeline,
             debug=debug,
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        for path in temp_paths:
+            try:
+                path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _run_pipeline(
+    *,
+    text: str,
+    audio_wav: str | None = None,
+    video: str | None = None,
+    frames: Optional[list[str]] = None,
+    asr_from_audio: bool = False,
+    asr_model: str = "openai/whisper-large-v3",
+    video_fps: float = 1.0,
+    max_frames: int = 10,
+    skip_face_pipeline: bool = False,
+    debug: bool = False,
+) -> ChatResponse:
+    final_text = text.strip()
+    audio = _read_wav_16khz_mono(audio_wav) if audio_wav else None
+
+    if asr_from_audio:
+        if not audio_wav:
+            raise ValueError("asr_from_audio=true requires audio_wav path")
+        transcriber = HFAPIAudioTranscriber(
+            model_name=asr_model,
+            api_token=API_TOKEN,
+            allow_fallback=True,
+        )
+        transcript = transcriber.transcribe(audio_wav).strip()
+        if transcript:
+            final_text = f"{final_text}\n{transcript}".strip() if final_text else transcript
+
+    if not final_text:
+        raise ValueError("text is required (or provide audio with ASR)")
+
+    current_frames: list[str] | None = None
+    face_pipeline = FacePipeline(fps=video_fps, max_frames=max_frames)
+
+    if video:
+        current_frames = face_pipeline.extract_frames_from_video(video)
+
+    if frames:
+        validated = []
+        for frame in frames:
+            frame_path = Path(frame)
+            if not frame_path.exists() or not frame_path.is_file():
+                raise FileNotFoundError(f"Frame file not found: {frame_path}")
+            validated.append(str(frame_path))
+        current_frames = (current_frames or []) + validated
+
+    if current_frames and not skip_face_pipeline:
+        current_frames = face_pipeline.process_frames(current_frames)
+    elif current_frames:
+        current_frames = current_frames[:max_frames]
+
+    user_input = UserInput(text=final_text, audio=audio, frames=current_frames)
+    output = PIPELINE.run_user_input(user_input)
+    responder_meta = getattr(PIPELINE.responder, "last_generation_meta", {}) or {}
+    response_source = str(responder_meta.get("source", "unknown"))
+    response_model = responder_meta.get("model")
+
+    debug_data = None
+    if debug:
+        debug_data = {
+            "text_len": len(final_text),
+            "audio_samples": len(audio) if audio is not None else 0,
+            "num_frames_inferred": len(current_frames) if current_frames is not None else 0,
+            "text_risk": output.features.text_risk,
+            "audio_affect_probs": output.features.audio_affect_probs,
+            "visual_affect_probs": output.features.visual_affect_probs,
+            "responder_meta": responder_meta,
+            "hf_token_loaded": bool(API_TOKEN),
+            "response_model": RESPONSE_MODEL,
+        }
+
+    return ChatResponse(
+        response=output.response,
+        risk_score=output.fusion.risk_score,
+        policy_state=output.policy.state.value,
+        reasons=output.policy.reasons,
+        modality_mask=output.fusion.modality_mask,
+        response_source=response_source,
+        response_model=str(response_model) if response_model is not None else None,
+        debug=debug_data,
+    )

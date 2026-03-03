@@ -104,3 +104,5 @@ cd web
 npm install
 npm run dev
 ```
+
+The web UI supports direct video upload for expression questions via `POST /api/chat-upload`.

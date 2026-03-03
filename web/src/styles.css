@@ -225,6 +225,11 @@ body,
   padding: 0.5rem;
 }
 
+.composer-main {
+  display: grid;
+  gap: 0.4rem;
+}
+
 .composer-input {
   border: none;
   background: transparent;
@@ -242,6 +247,45 @@ body,
 
 .composer-input::placeholder {
   color: var(--text-muted);
+}
+
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.45rem 0.35rem;
+}
+
+.attach-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.55rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.attach-btn input {
+  display: none;
+}
+
+.attach-name {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.clear-attach {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.72rem;
 }
 
 .composer-send {
