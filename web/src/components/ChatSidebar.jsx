@@ -18,12 +18,6 @@ export default function ChatSidebar({ onClearChats }) {
         <button className="history-item" type="button">Facial expression check</button>
         <button className="history-item" type="button">Audio + text reflection</button>
       </nav> */}
-
-      <div className="sidebar-footer">
-        <p className="safety-note">
-          For support and screening only, not diagnosis.
-        </p>
-      </div>
     </aside>
   );
 }

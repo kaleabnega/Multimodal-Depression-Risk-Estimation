@@ -1,16 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg-0: #1f1f1f;
-  --bg-1: #242424;
-  --bg-2: #2b2b2b;
-  --bg-3: #343434;
-  --line: #3f3f3f;
-  --text-main: #e8e8e8;
-  --text-dim: #b8b8b8;
-  --text-muted: #8e8e8e;
-  --accent: #ececec;
-  --shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+  --bg-0: #f3f3f3;
+  --bg-1: #ffffff;
+  --bg-2: #f7f7f7;
+  --bg-3: #efefef;
+  --line: #dddddd;
+  --line-strong: #bcbcbc;
+  --text-main: #171717;
+  --text-dim: #4f4f4f;
+  --text-muted: #7b7b7b;
+  --accent: #111111;
+  --accent-soft: #2f2f2f;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.06);
 }
 
 * {
@@ -22,7 +24,7 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
-  background: radial-gradient(circle at 30% 15%, #2d2d2d 0%, #202020 55%, #1a1a1a 100%);
+  background: linear-gradient(180deg, #fafafa 0%, #f4f4f4 100%);
   color: var(--text-main);
   font-family: 'Manrope', 'Segoe UI', sans-serif;
 }
@@ -34,7 +36,7 @@ body,
 }
 
 .chat-sidebar {
-  background: linear-gradient(180deg, #222222 0%, #1c1c1c 100%);
+  background: linear-gradient(180deg, #fcfcfc 0%, #f3f3f3 100%);
   border-right: 1px solid var(--line);
   padding: 1.1rem;
   display: flex;
@@ -52,7 +54,8 @@ body,
   width: 26px;
   height: 26px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #f2f2f2 0%, #b8b8b8 100%);
+  background: linear-gradient(135deg, #111111 0%, #3a3a3a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .brand-title {
@@ -83,6 +86,7 @@ body,
 .clear-chats-btn:hover,
 .history-item:hover {
   background: var(--bg-3);
+  border-color: var(--line-strong);
 }
 
 .section-title {
@@ -119,7 +123,8 @@ body,
 .chat-header {
   padding: 1.3rem 2rem 1rem;
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(2px);
+  background: rgba(255, 251, 245, 0.66);
+  backdrop-filter: blur(10px);
   animation: fade-in 420ms ease;
 }
 
@@ -159,12 +164,14 @@ body,
 }
 
 .message-row.assistant {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 253, 249, 0.92);
+  border-color: rgba(188, 188, 188, 0.46);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.04);
 }
 
 .message-row.user {
-  background: rgba(255, 255, 255, 0.01);
+  background: rgba(244, 244, 244, 0.92);
+  border-color: rgba(188, 188, 188, 0.28);
 }
 
 .message-avatar {
@@ -175,13 +182,13 @@ body,
   place-items: center;
   font-weight: 700;
   font-size: 0.82rem;
-  color: #101010;
-  background: linear-gradient(150deg, #efefef, #c9c9c9);
+  color: #fafafa;
+  background: linear-gradient(150deg, #111111, #3b3b3b);
 }
 
 .message-row.user .message-avatar {
-  background: linear-gradient(150deg, #939393, #6d6d6d);
-  color: #f2f2f2;
+  background: linear-gradient(150deg, #d8d8d8, #ababab);
+  color: #181818;
 }
 
 .message-role {
@@ -206,7 +213,7 @@ body,
 
 .chat-footer {
   border-top: 1px solid var(--line);
-  background: rgba(24, 24, 24, 0.92);
+  background: rgba(249, 249, 249, 0.9);
   backdrop-filter: blur(8px);
   padding: 0.9rem 1rem 1.1rem;
 }
@@ -265,6 +272,13 @@ body,
   color: var(--text-dim);
   font-size: 0.78rem;
   cursor: pointer;
+  background: rgba(255, 255, 255, 0.9);
+  transition: 180ms ease;
+}
+
+.attach-btn:hover {
+  border-color: var(--line-strong);
+  background: #ffffff;
 }
 
 .attach-btn input {
@@ -281,17 +295,22 @@ body,
 
 .clear-attach {
   border: 1px solid var(--line);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.9);
   color: var(--text-muted);
   border-radius: 0.4rem;
   cursor: pointer;
   font-size: 0.72rem;
 }
 
+.clear-attach:hover {
+  border-color: var(--line-strong);
+  color: var(--text-main);
+}
+
 .composer-send {
-  border: 1px solid #686868;
-  background: #efefef;
-  color: #161616;
+  border: 1px solid #1d1d1d;
+  background: linear-gradient(180deg, #2b2b2b 0%, #151515 100%);
+  color: #f7f7f7;
   border-radius: 0.75rem;
   font-weight: 700;
   padding: 0.65rem 1rem;
@@ -300,7 +319,7 @@ body,
 }
 
 .composer-send:hover:not(:disabled) {
-  background: #ffffff;
+  background: linear-gradient(180deg, #373737 0%, #1d1d1d 100%);
 }
 
 .composer-send:disabled {
