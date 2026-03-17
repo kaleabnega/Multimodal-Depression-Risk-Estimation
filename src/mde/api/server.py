@@ -156,7 +156,7 @@ async def chat_upload(
     text: str = Form(default=""),
     video_file: Optional[UploadFile] = File(default=None),
     audio_file: Optional[UploadFile] = File(default=None),
-    asr_from_audio: bool = Form(default=True),
+    asr_from_audio: bool = Form(default=False),
     asr_model: str = Form(default="openai/whisper-large-v3"),
     debug: bool = Form(default=False),
     video_fps: float = Form(default=1.0),

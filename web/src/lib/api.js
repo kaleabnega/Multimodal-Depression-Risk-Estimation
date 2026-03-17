@@ -4,12 +4,12 @@ export async function sendMessage(payload) {
     if (payload.videoFile || payload.audioFile) {
       const form = new FormData();
       form.append("text", payload.text ?? "");
+      form.append("asr_from_audio", String(Boolean(payload.asr_from_audio)));
       if (payload.videoFile) {
         form.append("video_file", payload.videoFile);
       }
       if (payload.audioFile) {
         form.append("audio_file", payload.audioFile);
-        form.append("asr_from_audio", String(payload.asr_from_audio ?? true));
         form.append("asr_model", String(payload.asr_model ?? "openai/whisper-large-v3"));
       }
       form.append("debug", String(Boolean(payload.debug)));
