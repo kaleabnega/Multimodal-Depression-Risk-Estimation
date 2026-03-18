@@ -5,7 +5,6 @@ export default function ChatSidebar({ onClearChats }) {
         <div className="brand-mark" />
         <div>
           <p className="brand-title">MDE Assistant</p>
-          <p className="brand-sub">Multimodal support</p>
         </div>
       </div>
 
