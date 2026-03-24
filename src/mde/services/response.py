@@ -184,9 +184,22 @@ class GuardedLLMResponseGenerator:
             r"\bsuicide plan\b",
         ]
 
-    def _prompt(self, data: AgentInput) -> str:
+    def _system_prompt(self) -> str:
+        return (
+            "You are a safe mental-health support assistant.\n"
+            "Primary behavior rules:\n"
+            "1) Continue the conversation naturally instead of restarting it.\n"
+            "2) Answer the user's latest question directly before adding support.\n"
+            "3) Do not repeatedly restate earlier advice unless the user asks for a recap.\n"
+            "4) For normal-risk conversations, do not jump to professional-help suggestions unless the user asks.\n"
+            "5) Be empathetic but conversational, not formal or repetitive.\n"
+            "6) Do not diagnose and do not provide self-harm instructions.\n"
+            "7) If the latest message is ambiguous, resolve it using the recent chat history.\n"
+            "8) Keep replies concise, usually 2-4 sentences.\n"
+        )
+
+    def _context_block(self, data: AgentInput) -> str:
         visual_ctx = _visual_affect_context(data.visual_affect_probs)
-        history_text = _format_conversation_history(data.conversation_history)
         cue_parts: list[str] = []
         if data.audio_summary and data.audio_summary != "no audio cues":
             cue_parts.append(f"audio={data.audio_summary}")
@@ -195,25 +208,33 @@ class GuardedLLMResponseGenerator:
         cues = ", ".join(cue_parts) if cue_parts else "none"
 
         return (
-            "You are a mental-health support assistant.\n"
-            "Rules:\n"
-            "1) Be empathetic and brief (3-5 sentences).\n"
-            "2) Do not diagnose.\n"
-            "3) Do not provide self-harm instructions.\n"
-            "4) Suggest professional support when risk is high.\n"
-            "5) Use plain language.\n\n"
-            "Use the recent conversation history to answer follow-up questions coherently.\n"
-            "If the latest user message is ambiguous on its own, resolve it from the recent history.\n\n"
+            "Conversation metadata:\n"
             "If user asks specifically about facial expression, answer from visual_affect context "
-            "with confidence and avoid depression conclusions.\n\n"
-            f"Recent conversation:\n{history_text}\n\n"
+            "with confidence and avoid depression conclusions.\n"
             f"Policy state: {data.policy_state.value}\n"
             f"Risk score: {data.risk_score:.3f}\n"
             f"Observed cues: {cues}\n"
-            f"Visual affect context: {visual_ctx}\n"
-            f"User message: {data.user_text}\n\n"
-            "Assistant response:"
+            f"Visual affect context: {visual_ctx}"
         )
+
+    def _chat_messages(self, data: AgentInput) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = [{"role": "system", "content": self._system_prompt()}]
+
+        for item in data.conversation_history[-6:]:
+            role = str(item.get("role", "")).strip().lower()
+            text = str(item.get("text", "")).strip()
+            if role not in {"user", "assistant"} or not text:
+                continue
+            messages.append({"role": role, "content": text})
+
+        messages.append(
+            {
+                "role": "system",
+                "content": self._context_block(data),
+            }
+        )
+        messages.append({"role": "user", "content": data.user_text})
+        return messages
 
     def _is_safe(self, text: str, state: PolicyState) -> bool:
         if not text.strip():
@@ -235,22 +256,18 @@ class GuardedLLMResponseGenerator:
 
         return True
 
-    def _generate_llm(self, prompt: str) -> str:
+    def _generate_llm(self, data: AgentInput) -> str:
         if self.client is None:
             raise RuntimeError("huggingface_hub is not installed")
 
-        # Prefer conversational endpoints because some providers expose chat-only tasks
-        # for instruct/chat models (e.g., Zephyr).
-        chat_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a safe mental-health support assistant. "
-                    "Do not diagnose and do not provide self-harm instructions."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ]
+        chat_messages = self._chat_messages(data)
+        prompt = (
+            f"{self._system_prompt()}\n\n"
+            f"Recent conversation:\n{_format_conversation_history(data.conversation_history)}\n\n"
+            f"{self._context_block(data)}\n\n"
+            f"User message: {data.user_text}\n\n"
+            "Assistant response:"
+        )
 
         last_error: Exception | None = None
         for model_name in self.model_candidates:
@@ -365,7 +382,7 @@ class GuardedLLMResponseGenerator:
             return out
 
         try:
-            generated = self._generate_llm(self._prompt(data))
+            generated = self._generate_llm(data)
             if self._is_safe(generated, data.policy_state):
                 self.last_generation_meta = {
                     "source": "llm",
