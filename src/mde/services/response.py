@@ -81,6 +81,23 @@ def _visual_affect_context(affect_probs: Optional[list[float]]) -> dict[str, Any
     }
 
 
+def _format_conversation_history(history: list[dict[str, str]], max_turns: int = 6) -> str:
+    if not history:
+        return "none"
+
+    recent = history[-max_turns:]
+    lines: list[str] = []
+    for item in recent:
+        role = str(item.get("role", "user")).strip().lower()
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        label = "User" if role == "user" else "Assistant"
+        lines.append(f"{label}: {text}")
+
+    return "\n".join(lines) if lines else "none"
+
+
 class TemplateResponseGenerator:
     """Policy-gated response templates with optional cue summaries."""
 
@@ -169,6 +186,7 @@ class GuardedLLMResponseGenerator:
 
     def _prompt(self, data: AgentInput) -> str:
         visual_ctx = _visual_affect_context(data.visual_affect_probs)
+        history_text = _format_conversation_history(data.conversation_history)
         cue_parts: list[str] = []
         if data.audio_summary and data.audio_summary != "no audio cues":
             cue_parts.append(f"audio={data.audio_summary}")
@@ -184,8 +202,11 @@ class GuardedLLMResponseGenerator:
             "3) Do not provide self-harm instructions.\n"
             "4) Suggest professional support when risk is high.\n"
             "5) Use plain language.\n\n"
+            "Use the recent conversation history to answer follow-up questions coherently.\n"
+            "If the latest user message is ambiguous on its own, resolve it from the recent history.\n\n"
             "If user asks specifically about facial expression, answer from visual_affect context "
             "with confidence and avoid depression conclusions.\n\n"
+            f"Recent conversation:\n{history_text}\n\n"
             f"Policy state: {data.policy_state.value}\n"
             f"Risk score: {data.risk_score:.3f}\n"
             f"Observed cues: {cues}\n"

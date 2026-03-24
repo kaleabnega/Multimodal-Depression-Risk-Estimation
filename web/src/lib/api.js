@@ -4,6 +4,10 @@ export async function sendMessage(payload) {
     if (payload.videoFile || payload.audioFile) {
       const form = new FormData();
       form.append("text", payload.text ?? "");
+      form.append(
+        "conversation_history_json",
+        JSON.stringify(Array.isArray(payload.conversationHistory) ? payload.conversationHistory : []),
+      );
       form.append("asr_from_audio", String(Boolean(payload.asr_from_audio)));
       if (payload.videoFile) {
         form.append("video_file", payload.videoFile);
@@ -33,7 +37,10 @@ export async function sendMessage(payload) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            conversation_history: Array.isArray(payload.conversationHistory) ? payload.conversationHistory : [],
+          }),
         },
       );
     }

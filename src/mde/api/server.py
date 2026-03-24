@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import tempfile
 import wave
@@ -82,6 +83,7 @@ class ChatRequest(BaseModel):
     audio_wav: Optional[str] = None
     video: Optional[str] = None
     frames: Optional[list[str]] = None
+    conversation_history: list[dict[str, str]] = Field(default_factory=list)
     asr_from_audio: bool = False
     asr_model: str = "openai/whisper-large-v3"
     video_fps: float = 1.0
@@ -140,6 +142,7 @@ def chat(req: ChatRequest) -> ChatResponse:
             audio_wav=req.audio_wav,
             video=req.video,
             frames=req.frames,
+            conversation_history=req.conversation_history,
             asr_from_audio=req.asr_from_audio,
             asr_model=req.asr_model,
             video_fps=req.video_fps,
@@ -156,6 +159,7 @@ async def chat_upload(
     text: str = Form(default=""),
     video_file: Optional[UploadFile] = File(default=None),
     audio_file: Optional[UploadFile] = File(default=None),
+    conversation_history_json: str = Form(default="[]"),
     asr_from_audio: bool = Form(default=False),
     asr_model: str = Form(default="openai/whisper-large-v3"),
     debug: bool = Form(default=False),
@@ -165,6 +169,12 @@ async def chat_upload(
 ) -> ChatResponse:
     temp_paths: list[Path] = []
     try:
+        try:
+            raw_history = json.loads(conversation_history_json or "[]")
+        except json.JSONDecodeError as exc:
+            raise ValueError("conversation_history_json must be valid JSON") from exc
+        conversation_history = _normalize_conversation_history(raw_history)
+
         video_path: str | None = None
         audio_wav_path: str | None = None
         asr_audio_path: str | None = None
@@ -192,6 +202,7 @@ async def chat_upload(
             text=text,
             audio_wav=audio_wav_path,
             asr_audio_path=asr_audio_path,
+            conversation_history=conversation_history,
             asr_from_audio=asr_from_audio,
             asr_model=asr_model,
             video=video_path,
@@ -217,6 +228,7 @@ def _run_pipeline(
     asr_audio_path: str | None = None,
     video: str | None = None,
     frames: Optional[list[str]] = None,
+    conversation_history: list[dict[str, str]] | None = None,
     asr_from_audio: bool = False,
     asr_model: str = "openai/whisper-large-v3",
     video_fps: float = 1.0,
@@ -281,7 +293,7 @@ def _run_pipeline(
         current_frames = current_frames[:max_frames]
 
     user_input = UserInput(text=final_text, audio=audio, frames=current_frames)
-    output = PIPELINE.run_user_input(user_input)
+    output = PIPELINE.run_user_input(user_input, conversation_history=conversation_history)
     responder_meta = getattr(PIPELINE.responder, "last_generation_meta", {}) or {}
     response_source = str(responder_meta.get("source", "unknown"))
     response_model = responder_meta.get("model")
@@ -316,3 +328,20 @@ def _run_pipeline(
         response_model=str(response_model) if response_model is not None else None,
         debug=debug_data,
     )
+
+
+def _normalize_conversation_history(raw_history: object) -> list[dict[str, str]]:
+    if not isinstance(raw_history, list):
+        raise ValueError("conversation history must be a list")
+
+    normalized: list[dict[str, str]] = []
+    for item in raw_history:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "")).strip().lower()
+        text = str(item.get("text", "")).strip()
+        if role not in {"user", "assistant"} or not text:
+            continue
+        normalized.append({"role": role, "text": text})
+
+    return normalized

@@ -54,6 +54,7 @@ class AgentInput:
     user_text: str
     risk_score: float
     policy_state: PolicyState
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
     audio_summary: Optional[str] = None
     visual_summary: Optional[str] = None
     visual_affect_probs: Optional[list[float]] = None

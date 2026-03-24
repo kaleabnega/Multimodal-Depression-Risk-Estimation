@@ -35,6 +35,13 @@ export default function App() {
     event.preventDefault();
     if (!canSend) return;
 
+    const conversationHistory = messages
+      .slice(initialMessages.length)
+      .map((message) => ({
+        role: message.role,
+        text: message.text,
+      }));
+
     const userMessage = {
       id: counter++,
       role: "user",
@@ -52,6 +59,7 @@ export default function App() {
       text: input.trim(),
       videoFile,
       audioFile,
+      conversationHistory,
       asr_from_audio: Boolean(audioFile),
       debug: true
     });

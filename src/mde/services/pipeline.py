@@ -22,7 +22,11 @@ class DepressionRiskPipeline:
         self.policy = policy
         self.responder = responder
 
-    def run_user_input(self, user_input: UserInput) -> PipelineOutput:
+    def run_user_input(
+        self,
+        user_input: UserInput,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> PipelineOutput:
         features, audio_summary, visual_summary = self.encoder.encode(user_input)
         fusion_out = self.fusion.predict(features)
         policy_out = self.policy.decide(text=user_input.text, risk_score=fusion_out.risk_score)
@@ -32,6 +36,7 @@ class DepressionRiskPipeline:
                 user_text=user_input.text,
                 risk_score=fusion_out.risk_score,
                 policy_state=policy_out.state,
+                conversation_history=conversation_history or [],
                 audio_summary=audio_summary,
                 visual_summary=visual_summary,
                 visual_affect_probs=features.visual_affect_probs,
