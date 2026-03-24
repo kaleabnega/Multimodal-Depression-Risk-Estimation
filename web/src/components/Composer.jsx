@@ -11,6 +11,17 @@ export default function Composer({
   onClearAudio,
   onSend
 }) {
+  function handleKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    if (!isSending && canSend) {
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
   return (
     <form className="composer" onSubmit={onSend}>
       <div className="composer-main">
@@ -18,6 +29,7 @@ export default function Composer({
           className="composer-input"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Message MDE Assistant"
           rows={1}
         />
