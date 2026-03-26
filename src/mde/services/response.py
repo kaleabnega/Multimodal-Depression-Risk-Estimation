@@ -196,11 +196,16 @@ class GuardedLLMResponseGenerator:
             "6) Do not diagnose and do not provide self-harm instructions.\n"
             "7) If the latest message is ambiguous, resolve it using the recent chat history.\n"
             "8) Keep replies concise, usually 2-4 sentences.\n"
+            "9) You may receive preprocessed audio and visual evidence from attachments.\n"
+            "10) If multimodal cues are available, do not claim you cannot access attachments or cannot see the video.\n"
+            "11) When answering about visual expression, speak from the provided visual evidence, not from generic inference.\n"
         )
 
     def _context_block(self, data: AgentInput) -> str:
         visual_ctx = _visual_affect_context(data.visual_affect_probs)
         cue_parts: list[str] = []
+        visual_available = bool(data.visual_summary and data.visual_summary != "no visual cues")
+        audio_available = bool(data.audio_summary and data.audio_summary != "no audio cues")
         if data.audio_summary and data.audio_summary != "no audio cues":
             cue_parts.append(f"audio={data.audio_summary}")
         if data.visual_summary and data.visual_summary != "no visual cues":
@@ -209,6 +214,8 @@ class GuardedLLMResponseGenerator:
 
         return (
             "Conversation metadata:\n"
+            f"Processed visual evidence available: {str(visual_available).lower()}\n"
+            f"Processed audio evidence available: {str(audio_available).lower()}\n"
             "If user asks specifically about facial expression, answer from visual_affect context "
             "with confidence and avoid depression conclusions.\n"
             f"Policy state: {data.policy_state.value}\n"
