@@ -57,7 +57,7 @@ export default function Composer({
         </div>
       </div>
       <button className="composer-send" type="submit" disabled={isSending || !canSend}>
-        {isSending ? 'Sending...' : 'Send'}
+        {isSending ? 'Processing...' : 'Send'}
       </button>
     </form>
   )
