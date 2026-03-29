@@ -98,6 +98,106 @@ def _format_conversation_history(history: list[dict[str, str]], max_turns: int =
     return "\n".join(lines) if lines else "none"
 
 
+def _is_contextual_followup(text: str, history: list[dict[str, str]]) -> bool:
+    lowered = text.strip().lower()
+    if not lowered or not history:
+        return False
+
+    followup_starts = [
+        "why",
+        "how",
+        "what about",
+        "so",
+        "then",
+        "and",
+        "okay",
+        "i see",
+        "alright",
+        "right",
+        "can you explain",
+        "tell me more",
+        "what do you mean",
+    ]
+    return any(lowered == phrase or lowered.startswith(f"{phrase} ") for phrase in followup_starts)
+
+
+def _is_obviously_irrelevant(text: str, history: list[dict[str, str]]) -> bool:
+    lowered = text.strip().lower()
+    if not lowered:
+        return False
+
+    if _is_contextual_followup(lowered, history):
+        return False
+
+    on_topic_terms = [
+        "feel",
+        "feeling",
+        "mood",
+        "emotion",
+        "mental",
+        "stress",
+        "stressed",
+        "anxiety",
+        "anxious",
+        "depress",
+        "sad",
+        "overwhelm",
+        "cope",
+        "coping",
+        "support",
+        "therapy",
+        "therapist",
+        "counsel",
+        "burnout",
+        "sleep",
+        "lonely",
+        "hopeless",
+        "suic",
+        "self-harm",
+        "self harm",
+        "face",
+        "facial",
+        "expression",
+        "smile",
+        "video",
+        "audio",
+        "voice",
+        "tone",
+    ]
+    if any(term in lowered for term in on_topic_terms):
+        return False
+
+    irrelevant_patterns = [
+        r"\bpythagorean\b",
+        r"\btheorem\b",
+        r"\brecipe\b",
+        r"\bcook(?:ing)?\b",
+        r"\bingredients?\b",
+        r"\bsolve\b.*\b(math|equation|algebra|geometry|calculus)\b",
+        r"\bwhat is\b.*\b(math|physics|chemistry|biology|history|geography)\b",
+        r"\bcapital of\b",
+        r"\bweather\b",
+        r"\bsports?\b",
+        r"\bfootball score\b",
+        r"\bstock\b",
+        r"\bcrypto\b",
+        r"\bprogram(?:ming)?\b",
+        r"\bpython\b",
+        r"\bjavascript\b",
+        r"\bjava\b",
+        r"\breact\b",
+        r"\bcode\b",
+        r"\bdebug\b",
+        r"\bbug\b",
+        r"\bsql\b",
+        r"\btravel\b",
+        r"\bhotel\b",
+        r"\bflight\b",
+    ]
+
+    return any(re.search(pattern, lowered) for pattern in irrelevant_patterns)
+
+
 class TemplateResponseGenerator:
     """Policy-gated response templates with optional cue summaries."""
 
@@ -106,9 +206,18 @@ class TemplateResponseGenerator:
             "I am really glad you shared this. You may be in immediate danger, and it is important to contact "
             "local emergency services or a crisis hotline right now. If you are in the U.S., call or text 988."
         )
+        self.scope_line = (
+            "I can help with mental-health support, coping-related conversation, and interpretation of the text, "
+            "audio, or visual cues you share here. I cannot answer clearly unrelated questions like general math, "
+            "coding, recipes, or other off-topic requests in this interface."
+        )
         self.last_generation_meta: dict[str, Any] = {"source": "template"}
 
     def generate(self, data: AgentInput) -> str:
+        if _is_obviously_irrelevant(data.user_text, data.conversation_history):
+            self.last_generation_meta = {"source": "template_scope_refusal"}
+            return self.scope_line
+
         if _is_visual_expression_query(data.user_text):
             visual_answer = _format_visual_expression_response(data.visual_affect_probs)
             if visual_answer:
@@ -199,6 +308,8 @@ class GuardedLLMResponseGenerator:
             "9) You may receive preprocessed audio and visual evidence from attachments.\n"
             "10) If multimodal cues are available, do not claim you cannot access attachments or cannot see the video.\n"
             "11) When answering about visual expression, speak from the provided visual evidence, not from generic inference.\n"
+            "12) If the user asks an obviously unrelated question, politely refuse and explain that this interface is "
+            "for mental-health support, coping, and multimodal cue interpretation.\n"
         )
 
     def _context_block(self, data: AgentInput) -> str:
@@ -366,6 +477,11 @@ class GuardedLLMResponseGenerator:
         return ""
 
     def generate(self, data: AgentInput) -> str:
+        if _is_obviously_irrelevant(data.user_text, data.conversation_history):
+            out = self.template.generate(data)
+            self.last_generation_meta = self.template.last_generation_meta
+            return out
+
         if _is_visual_expression_query(data.user_text):
             visual_ctx = _visual_affect_context(data.visual_affect_probs)
             if not visual_ctx["available"] or visual_ctx["confidence"] < 0.50:
