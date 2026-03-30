@@ -207,9 +207,8 @@ class TemplateResponseGenerator:
             "local emergency services or a crisis hotline right now. If you are in the U.S., call or text 988."
         )
         self.scope_line = (
-            "I can help with mental-health support, coping-related conversation, and interpretation of the text, "
-            "audio, or visual cues you share here. I cannot answer clearly unrelated questions like general math, "
-            "coding, recipes, or other off-topic requests in this interface."
+            "I am sorry but I can only help with queries related to mental-health support, coping-related conversation, and interpretation of the text, "
+            "audio, or visual cues you share here."
         )
         self.last_generation_meta: dict[str, Any] = {"source": "template"}
 
