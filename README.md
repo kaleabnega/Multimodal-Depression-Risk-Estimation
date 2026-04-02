@@ -16,7 +16,7 @@ The system supports different input combinations:
 - text + audio,
 - text + video,
 - text + audio + video,
-- audio-to-text via ASR (optional).
+- audio-to-text via ASR.
 
 At runtime, it:
 

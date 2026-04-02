@@ -121,25 +121,20 @@ def _is_contextual_followup(text: str, history: list[dict[str, str]]) -> bool:
     return any(lowered == phrase or lowered.startswith(f"{phrase} ") for phrase in followup_starts)
 
 
-def _is_obviously_irrelevant(text: str, history: list[dict[str, str]]) -> bool:
-    lowered = text.strip().lower()
-    if not lowered:
-        return False
-
-    if _is_contextual_followup(lowered, history):
-        return False
-
-    on_topic_terms = [
+def _topic_terms() -> list[str]:
+    return [
         "feel",
         "feeling",
         "mood",
         "emotion",
+        "emotional",
         "mental",
         "stress",
         "stressed",
         "anxiety",
         "anxious",
         "depress",
+        "depression",
         "sad",
         "overwhelm",
         "cope",
@@ -152,9 +147,14 @@ def _is_obviously_irrelevant(text: str, history: list[dict[str, str]]) -> bool:
         "sleep",
         "lonely",
         "hopeless",
+        "motivation",
+        "motivate",
+        "panic",
         "suic",
         "self-harm",
         "self harm",
+        "wellbeing",
+        "well-being",
         "face",
         "facial",
         "expression",
@@ -164,8 +164,18 @@ def _is_obviously_irrelevant(text: str, history: list[dict[str, str]]) -> bool:
         "voice",
         "tone",
     ]
-    if any(term in lowered for term in on_topic_terms):
-        return False
+
+
+def _query_is_in_scope(text: str, history: list[dict[str, str]]) -> bool:
+    lowered = text.strip().lower()
+    if not lowered:
+        return True
+
+    if _is_contextual_followup(lowered, history):
+        return True
+
+    if any(term in lowered for term in _topic_terms()):
+        return True
 
     irrelevant_patterns = [
         r"\bpythagorean\b",
@@ -195,7 +205,24 @@ def _is_obviously_irrelevant(text: str, history: list[dict[str, str]]) -> bool:
         r"\bflight\b",
     ]
 
-    return any(re.search(pattern, lowered) for pattern in irrelevant_patterns)
+    if any(re.search(pattern, lowered) for pattern in irrelevant_patterns):
+        return False
+
+    return True
+
+
+def _response_is_in_scope(text: str) -> bool:
+    lowered = text.strip().lower()
+    if not lowered:
+        return False
+
+    if lowered == (
+        "i am sorry but i can only help with queries related to mental-health support, "
+        "coping-related conversation, and interpretation of the text, audio, or visual cues you share here."
+    ):
+        return True
+
+    return any(term in lowered for term in _topic_terms())
 
 
 class TemplateResponseGenerator:
@@ -213,7 +240,7 @@ class TemplateResponseGenerator:
         self.last_generation_meta: dict[str, Any] = {"source": "template"}
 
     def generate(self, data: AgentInput) -> str:
-        if _is_obviously_irrelevant(data.user_text, data.conversation_history):
+        if not _query_is_in_scope(data.user_text, data.conversation_history):
             self.last_generation_meta = {"source": "template_scope_refusal"}
             return self.scope_line
 
@@ -307,8 +334,11 @@ class GuardedLLMResponseGenerator:
             "9) You may receive preprocessed audio and visual evidence from attachments.\n"
             "10) If multimodal cues are available, do not claim you cannot access attachments or cannot see the video.\n"
             "11) When answering about visual expression, speak from the provided visual evidence, not from generic inference.\n"
-            "12) If the user asks an obviously unrelated question, politely refuse and explain that this interface is "
-            "for mental-health support, coping, and multimodal cue interpretation.\n"
+            "12) Before answering, decide whether the user's request is related to mental-health support, coping, "
+            "mood, emotional wellbeing, or interpretation of provided text, audio, or visual cues.\n"
+            "13) If it is not related to those topics, refuse with exactly this sentence and nothing else:\n"
+            "\"I am sorry but I can only help with queries related to mental-health support, coping-related conversation, "
+            "and interpretation of the text, audio, or visual cues you share here.\"\n"
         )
 
     def _context_block(self, data: AgentInput) -> str:
@@ -476,7 +506,7 @@ class GuardedLLMResponseGenerator:
         return ""
 
     def generate(self, data: AgentInput) -> str:
-        if _is_obviously_irrelevant(data.user_text, data.conversation_history):
+        if not _query_is_in_scope(data.user_text, data.conversation_history):
             out = self.template.generate(data)
             self.last_generation_meta = self.template.last_generation_meta
             return out
@@ -505,17 +535,15 @@ class GuardedLLMResponseGenerator:
 
         try:
             generated = self._generate_llm(data)
-            if self._is_safe(generated, data.policy_state):
+            if self._is_safe(generated, data.policy_state) and _response_is_in_scope(generated):
                 self.last_generation_meta = {
                     "source": "llm",
                     "model": self._last_model_used or self.model_name,
                 }
                 return generated
-            if not self.allow_fallback:
-                raise ValueError("LLM output did not pass safety validation")
-            out = self.template.generate(data)
+            out = self.template.scope_line
             self.last_generation_meta = {
-                "source": "template_fallback_unsafe",
+                "source": "template_scope_refusal_output_guard",
                 "model": self._last_model_used or self.model_name,
             }
             return out
