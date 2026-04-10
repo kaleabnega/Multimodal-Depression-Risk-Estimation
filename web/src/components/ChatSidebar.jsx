@@ -12,11 +12,7 @@ export default function ChatSidebar({ onClearChats }) {
         Clear Chats
       </button>
 
-      {/* <nav className="sidebar-section" aria-label="Recent">
-        <p className="section-title">Recent</p>
-        <button className="history-item" type="button">Facial expression check</button>
-        <button className="history-item" type="button">Audio + text reflection</button>
-      </nav> */}
+   
     </aside>
   );
 }
